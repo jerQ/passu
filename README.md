@@ -18,9 +18,11 @@ random number generator:
 4. Press BOOT, or run `passu` on the computer.
 5. Get your passphrase over USB serial, or on an optional OLED display.
 
-How it is built and why: [DESIGN.md](DESIGN.md). Every security measure, the
-optional device lockdown and the known gaps: [SECURITY.md](SECURITY.md). A
-one-page quick reference: [USAGE.md](USAGE.md).
+How it is built and why: [DESIGN.md](DESIGN.md). 
+
+Every security measure, the optional device lockdown and the known gaps: [SECURITY.md](SECURITY.md). 
+
+A one-page quick reference: [USAGE.md](USAGE.md).
 
 ## Contents
 
