@@ -1,0 +1,12 @@
+# Keep logs quiet; passphrases are printed with printf, never logged.
+CONFIG_LOG_DEFAULT_LEVEL_WARN=y
+
+# No core dumps: they could contain a passphrase from RAM.
+CONFIG_ESP_COREDUMP_ENABLE_TO_NONE=y
+
+# Reboot silently on a crash: the panic dump prints CPU registers, which
+# could hold passphrase bytes. app_main reports the crash after reboot.
+CONFIG_ESP_SYSTEM_PANIC_SILENT_REBOOT=y
+
+# Wi-Fi is only used to keep the RF noise source running.
+CONFIG_ESP_WIFI_NVS_ENABLED=n

@@ -1,0 +1,40 @@
+# Lockdown profile: Secure Boot V2 + ROM download mode disabled.
+#
+# WARNING: a device that boots firmware built with this profile PERMANENTLY
+# changes eFuses. None of it can be undone. Read "Locking down a device" in
+# SECURITY.md before using it. The build refuses to run until
+# CONFIG_DW_LOCKDOWN_ACK is set in menuconfig.
+#
+# Use on top of the normal defaults, in a separate build directory:
+#   idf.py -B build-secure -D SDKCONFIG=build-secure/sdkconfig \
+#          -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.secure" build
+
+# Secure Boot V2 needs ESP32 revision v3.0 (ECO3) or newer. The image will
+# not run on older chips.
+CONFIG_ESP32_REV_MIN_3=y
+
+# Secure Boot V2, RSA-3072 (the only V2 scheme on ESP32). On first boot the
+# bootloader burns any of these that aren't already set: the key digest in
+# BLOCK2, ABS_DONE_1, JTAG_DISABLE, CONSOLE_DEBUG_DISABLE.
+CONFIG_SECURE_BOOT=y
+CONFIG_SECURE_BOOT_V2_ENABLED=y
+CONFIG_SECURE_SIGNED_APPS_RSA_SCHEME=y
+CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES=y
+# Relative to the project directory; *.pem is in .gitignore.
+CONFIG_SECURE_BOOT_SIGNING_KEY="secure_boot_signing_key.pem"
+
+# On first boot the app burns UART_DOWNLOAD_DIS: esptool and espefuse can
+# never connect again. (Secure download mode doesn't exist on ESP32.)
+CONFIG_SECURE_DISABLE_ROM_DL_MODE=y
+
+# `idf.py flash` writes the bootloader too, then leaves the chip in the ROM
+# loader instead of booting it, so the eFuses can be burned one at a time
+# with espefuse before the first boot.
+CONFIG_SECURE_BOOT_FLASH_BOOTLOADER_DEFAULT=y
+CONFIG_ESPTOOLPY_AFTER_NORESET=y
+
+# The signed bootloader is larger; make room before the partition table.
+CONFIG_PARTITION_TABLE_OFFSET=0x10000
+
+# No flash encryption on purpose: passu stores no secrets and the firmware
+# is public. See SECURITY.md.
