@@ -98,9 +98,12 @@ step and the alternatives that were rejected.
 
 **Hardware**
 
-- An ESP32 dev board. Tested with a classic ESP32 (ESP32-D0WD-V3). Other
-  variants with Wi-Fi (S3, C3, …) may work after `idf.py set-target`, but
-  that is untested, and the lockdown profile is for the classic ESP32 only.
+- An ESP32 dev board. Tested with a classic ESP32 (ESP32-D0WD-V3) and an
+  ESP32-C3 with native USB (`idf.py set-target esp32c3`; the button is
+  BOOT on GPIO9, and `sdkconfig.defaults.esp32c3` puts the console on the
+  built-in USB-Serial/JTAG). Other variants with Wi-Fi (S3, …) may work after
+  `idf.py set-target`, but that is untested, and the lockdown profile is for
+  the classic ESP32 only.
 - A USB **data** cable. Charge-only cables don't work.
 - Optional: a 128x64 or 128x32 I2C OLED display (see
   [OLED display](#oled-display-optional)).

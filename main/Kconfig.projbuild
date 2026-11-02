@@ -2,11 +2,13 @@ menu "passu"
 
     config DW_BUTTON_GPIO
         int "Trigger button GPIO"
+        default 9 if IDF_TARGET_ESP32C3
         default 0
         range 0 48
         help
             GPIO of a push button wired to GND (internal pull-up is enabled).
-            GPIO0 is the BOOT button on most ESP32 dev boards.
+            The BOOT button is GPIO0 on most ESP32 and ESP32-S3 boards and
+            GPIO9 on ESP32-C3 boards.
 
     config DW_GROUPS
         int "Number of word+digit groups"
@@ -104,11 +106,13 @@ menu "passu"
 
     config DW_DISPLAY_SDA
         int "SDA GPIO"
+        default 4 if IDF_TARGET_ESP32C3
         default 21
         range 0 48
 
     config DW_DISPLAY_SCL
         int "SCL GPIO"
+        default 5 if IDF_TARGET_ESP32C3
         default 22
         range 0 48
 

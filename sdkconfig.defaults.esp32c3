@@ -1,0 +1,9 @@
+# ESP32-C3 settings, applied on top of sdkconfig.defaults when the target is
+# esp32c3 (idf.py set-target esp32c3).
+
+# Most C3 boards connect over the chip's built-in USB-Serial/JTAG
+# (/dev/ttyACM0) instead of a USB-UART bridge. As a secondary console it is
+# output only, so Enter and the `passu` host command would get no answer;
+# make it the primary console. Boards that use a USB-UART bridge
+# (/dev/ttyUSB0) need CONFIG_ESP_CONSOLE_UART_DEFAULT=y instead.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
