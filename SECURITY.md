@@ -237,7 +237,7 @@ library's stdout buffer, where `secure_zero()` can't reach it.
 ### No passphrases in logs
 
 **What:** passphrases are printed with `printf` only, never through
-ESP-IDF's logging. The default log level is WARN.
+ESP-IDF's logging. The default log level is WARN, for the bootloader too.
 
 **Why:** log output can be redirected, kept in buffers or sent elsewhere. A
 quiet log level also keeps unnecessary detail off the serial port.

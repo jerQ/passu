@@ -134,6 +134,8 @@ Notes:
   and display GPIOs exist on the board, and set them in menuconfig.
 - **Lockdown** (`sdkconfig.secure`) is written for the classic ESP32 only.
   Don't use it on other chips.
+- **Flash size:** the firmware expects at least 4 MB of flash, which the
+  usual modules and boards have.
 - **Chips without Wi-Fi** (such as the ESP32-H2) are not supported: passu
   runs Wi-Fi to keep the hardware RNG's entropy source going.
 
@@ -397,7 +399,10 @@ Run `idf.py menuconfig` → *passu*:
 
 `sdkconfig.defaults` also sets security-related ESP-IDF options (log level,
 core dumps, silent reboot on a crash, Wi-Fi storage); see
-[SECURITY.md](SECURITY.md).
+[SECURITY.md](SECURITY.md). It also sets the flash size to 4 MB and skips
+stored RF calibration data, so the boot log has no warnings. A board with
+less than 4 MB of flash won't boot unless you lower the flash size in
+menuconfig (*Serial flasher config* → *Flash size*).
 
 ## OLED display (optional)
 

@@ -10,3 +10,14 @@ CONFIG_ESP_SYSTEM_PANIC_SILENT_REBOOT=y
 
 # Wi-Fi is only used to keep the RF noise source running.
 CONFIG_ESP_WIFI_NVS_ENABLED=n
+
+# Always do a full RF calibration instead of looking up stored data in NVS
+# (NVS is never initialised); avoids an error and a warning on every boot.
+CONFIG_ESP_PHY_CALIBRATION_AND_DATA_STORAGE=n
+
+# The supported boards have 4 MB of flash; a smaller header only causes a
+# boot warning. A board with less than 4 MB won't boot with this setting.
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+
+# Bootloader: only warnings and errors, no partition table or segment list.
+CONFIG_BOOTLOADER_LOG_LEVEL_WARN=y

@@ -66,6 +66,9 @@ makes the result less random.
    | ESP32-C3 with native USB | Chip or cover says ESP32-C3; no separate USB chip (for example "Super Mini" boards) | `passu-<version>-esp32c3.bin` | Tested |
    | ESP32-C3 with a separate USB chip | Says ESP32-C3, with a CP2102 or CH340 chip next to the USB socket | None: the ready-made firmware doesn't talk through that chip | Build it yourself |
 
+   The board needs at least 4 MB of flash memory, which almost all of these
+   boards have.
+
    For boards without a ready-made firmware file,
    [BUILDING.md](BUILDING.md#supported-boards) shows how to build passu
    yourself.
