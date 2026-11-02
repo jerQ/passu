@@ -2,7 +2,7 @@
 
 Quick reference for a board flashed with the default settings: no display,
 8 groups (~130 bits), button on GPIO0 (BOOT), Enter over serial enabled.
-Building and flashing: see [README.md](README.md#build-and-flash).
+Building and flashing: see [BUILDING.md](BUILDING.md#build-and-flash).
 
 ## One-time setup (Linux)
 
@@ -69,4 +69,4 @@ was skipped. If it keeps appearing, check the cable.
   the terminal afterwards.
 - The computer sees every passphrase sent over serial. For passphrases it
   must never see, use a board with a display and serial printing off
-  ([README, OLED display](README.md#oled-display-optional)).
+  ([BUILDING.md, OLED display](BUILDING.md#oled-display-optional)).

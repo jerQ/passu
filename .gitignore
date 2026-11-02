@@ -5,12 +5,12 @@ build/
 sdkconfig
 sdkconfig.old
 
-# Secure Boot signing keys must never be committed (see README, "Locking
+# Secure Boot signing keys must never be committed (see BUILDING.md, "Locking
 # down a device"), and the lockdown build has its own directory.
 *.pem
 build-secure/
 
-# Extra build directories and their config fragments (README, "Several
+# Extra build directories and their config fragments (BUILDING.md, "Several
 # configurations side by side")
 build-*/
 *.cfg
@@ -18,3 +18,6 @@ build-*/
 # Host test binary (make -C test)
 test/test_host
 __pycache__/
+
+# Release images (tools/release.sh)
+dist/
