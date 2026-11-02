@@ -97,26 +97,28 @@ should say `OK`.
 1. Plug the board into the computer.
 2. In Chrome or Edge, open Espressif's web flasher:
    <https://espressif.github.io/esptool-js/>
-3. Click **Connect**. A window lists the USB devices: pick the board and
+3. Set **Baudrate** to **115200**. Faster speeds fail on some boards and
+   USB chips.
+4. Click **Connect**. A window lists the USB devices: pick the board and
    click **Connect** again.
    - A classic ESP32 usually shows up as *CP2102* or *USB Serial* (CH340).
    - An ESP32-C3 with native USB shows up as *USB JTAG/serial debug unit*.
-4. In the programming section, set **Flash Address** to `0x0` and choose
+5. In the programming section, set **Flash Address** to `0x0` and choose
    the `.bin` file you downloaded.
-5. Click **Program** and wait until it says it is finished (under a
+6. Click **Program** and wait until it says it is finished (about a
    minute).
-6. Press the board's **RST** (or **EN**) button, or unplug and replug it.
+7. Press the board's **RST** (or **EN**) button, or unplug and replug it.
    passu is now running.
 
 **It doesn't connect?** Hold down the **BOOT** button on the board, click
-Connect, and let go of BOOT once the flashing starts. Also try another
-cable or USB port.
+Connect, and let go of BOOT once the flashing starts. Check that the
+baud rate is 115200. Also try another cable or USB port.
 
 **Prefer the terminal?** With Python installed:
 
 ```bash
 pip install esptool
-esptool write-flash 0x0 passu-<version>-<chip>.bin
+esptool -b 115200 write-flash 0x0 passu-<version>-<chip>.bin
 ```
 
 ## Get a passphrase with the BOOT button
@@ -205,7 +207,7 @@ The full list of options and messages is in [USAGE.md](USAGE.md).
 | Problem | What to do |
 | --- | --- |
 | The web flasher doesn't list the board | Use another USB cable (it may be charge-only) or another USB port. On Linux, check that you are in the `dialout` group |
-| The web flasher can't connect or stops while flashing | Hold BOOT while clicking Connect; use another cable or port; close other programs using the board |
+| The web flasher can't connect, or stops with an error such as "Failed to start stub flasher" | Set the baud rate to 115200; hold BOOT while clicking Connect; use another cable or port; close other programs using the board |
 | Nothing happens when I press BOOT | Make sure the console is started at 115200. Press RST/EN once and try again. Check that you flashed the right file for your board |
 | `passu`: No ESP32 found | Plug the board in with a data cable. Wait a few seconds after plugging in |
 | `passu`: the port is busy | Close the browser console or any other serial terminal |
