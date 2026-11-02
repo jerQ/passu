@@ -98,12 +98,7 @@ step and the alternatives that were rejected.
 
 **Hardware**
 
-- An ESP32 dev board. Tested with a classic ESP32 (ESP32-D0WD-V3) and an
-  ESP32-C3 with native USB (`idf.py set-target esp32c3`; the button is
-  BOOT on GPIO9, and `sdkconfig.defaults.esp32c3` puts the console on the
-  built-in USB-Serial/JTAG). Other variants with Wi-Fi (S3, …) may work after
-  `idf.py set-target`, but that is untested, and the lockdown profile is for
-  the classic ESP32 only.
+- An ESP32 dev board; see [Supported boards](#supported-boards).
 - A USB **data** cable. Charge-only cables don't work.
 - Optional: a 128x64 or 128x32 I2C OLED display (see
   [OLED display](#oled-display-optional)).
@@ -116,6 +111,28 @@ step and the alternatives that were rejected.
 - Git, to clone the repository.
 - Python 3 with `pyserial` for the host command.
 - Linux. macOS should work too; other platforms are untested.
+
+### Supported boards
+
+| Chip | Status | `set-target` | USB serial port | Button (default) | OLED SDA / SCL (default) | Lockdown profile |
+| --- | --- | --- | --- | --- | --- | --- |
+| ESP32 (classic, tested with ESP32-D0WD-V3) | Tested | `esp32` | `/dev/ttyUSB0` (USB-UART bridge) | GPIO0 (BOOT) | GPIO21 / GPIO22 | Yes |
+| ESP32-C3, native USB | Tested | `esp32c3` | `/dev/ttyACM0` (built-in USB-Serial/JTAG) | GPIO9 (BOOT) | GPIO4 / GPIO5 | No |
+| ESP32-C3, USB-UART bridge | Untested | `esp32c3` | `/dev/ttyUSB0` | GPIO9 (BOOT) | GPIO4 / GPIO5 | No |
+| Other chips with Wi-Fi (S3, …) | Untested | | | Check the board | Check the board | No |
+
+Notes:
+
+- **ESP32-C3:** `sdkconfig.defaults.esp32c3` is applied automatically after
+  `idf.py set-target esp32c3`. It makes the built-in USB-Serial/JTAG the
+  console; a C3 board with a USB-UART bridge needs
+  `CONFIG_ESP_CONSOLE_UART_DEFAULT=y` instead.
+- **Other chips** may work after `idf.py set-target`. Check that the button
+  and display GPIOs exist on the board, and set them in menuconfig.
+- **Lockdown** (`sdkconfig.secure`) is written for the classic ESP32 only.
+  Don't use it on other chips.
+- **Chips without Wi-Fi** (such as the ESP32-H2) are not supported: passu
+  runs Wi-Fi to keep the hardware RNG's entropy source going.
 
 **Linux serial port access:** your user must be in the `dialout` group. Log
 out and back in afterwards:
@@ -180,7 +197,7 @@ Check it with `idf.py --version`, which should print `ESP-IDF v6.1`.
 Once per checkout. This creates `sdkconfig` and wipes the build directory:
 
 ```bash
-idf.py set-target esp32          # other chips are untested
+idf.py set-target esp32          # or esp32c3; see Supported boards
 ```
 
 ### 5. Configure (optional)
