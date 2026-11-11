@@ -328,9 +328,11 @@ Then plug in the board and run:
 
 | Command | Result |
 | --- | --- |
-| `passu` | One passphrase |
+| `passu` | One passphrase of 5 word+digit groups (~81 bits) |
+| `passu -w 8` | 8 groups instead of 5; at most the firmware's *Number of word+digit groups* |
+| `passu --no-digits` | Words without the digit after each |
+| `passu -s` | Words separated by spaces instead of `-` |
 | `passu -n 3` | Three passphrases, one per line; no button press needed |
-| `passu -s` | Groups separated by spaces instead of `-` |
 | `passu --copy` | To the clipboard instead of the terminal (with `-n`, only the last one stays) |
 | `passu --button` | Wait for a BOOT press for each passphrase instead of asking over serial |
 | `passu -p /dev/ttyACM0` | Use a specific serial port (or set `PASSU_PORT`) |

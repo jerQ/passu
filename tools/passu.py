@@ -2,11 +2,17 @@
 """
 Get passphrases from a passu device (ESP32 diceware generator) over USB serial.
 
-    passu              print one passphrase (requested over serial)
+    passu              print one passphrase of 5 words (requested over serial)
+    passu -w 8         use 8 words instead of 5
+    passu --no-digits  leave out the digit after each word
+    passu --spaces     separate the words with spaces instead of '-'
     passu -n 3         print three passphrases
     passu --button     wait for a BOOT button press for each passphrase
     passu --copy       copy to the clipboard instead of printing
-    passu --spaces     separate the groups with spaces instead of '-'
+
+The device sends 8 word+digit groups by default; --words keeps the first N.
+Each word is worth ~12.9 bits and each digit ~3.3 bits, so 5 words with
+digits are ~81 bits and without digits ~65 bits.
 
 The passphrase goes to stdout; prompts and errors go to stderr, so
 `passu > file` or `passu | something` only passes the passphrase on.
@@ -50,6 +56,7 @@ DEVICE_ERROR = re.compile(r"DEVICE-ERROR: (.*?)\s*$")
 FORMAT = re.compile(r"[a-z][a-z-]*[0-9](?:-[a-z][a-z-]*[0-9])*")
 # the '-' between groups: right after a group's digit, never inside a word
 SEPARATOR = re.compile(r"(?<=[0-9])-")
+DEFAULT_WORDS = 5
 
 
 def info(msg):
@@ -102,6 +109,20 @@ def copy_to_clipboard(text):
     sys.exit("No clipboard tool found (install wl-clipboard or xclip)")
 
 
+def shape(phrase, words, digits, spaces):
+    """Keep the first `words` groups (taking a prefix keeps them uniformly
+    random), optionally drop each group's digit, and join them."""
+    groups = SEPARATOR.split(phrase)
+    if len(groups) < words:
+        sys.exit(f"The device sent {len(groups)} words, fewer than the "
+                 f"{words} asked for (raise 'Number of word+digit groups' "
+                 "in the firmware, or use a smaller --words)")
+    groups = groups[:words]
+    if not digits:
+        groups = [g[:-1] for g in groups]
+    return (" " if spaces else "-").join(groups)
+
+
 def read_passphrase(port, timeout, bare_ok):
     """Return the next passphrase from the serial stream, waiting at most
     `timeout` seconds (None: no limit). With bare_ok, an untagged line in
@@ -144,12 +165,20 @@ def main():
                          "instead of requesting it over serial")
     ap.add_argument("--copy", action="store_true",
                     help="copy to clipboard instead of printing (last one if -n > 1)")
+    ap.add_argument("-w", "--words", type=int, default=DEFAULT_WORDS,
+                    help=f"number of words (default {DEFAULT_WORDS}); the first "
+                         "N of the groups the device sends")
+    ap.add_argument("--no-digits", dest="digits", action="store_false",
+                    help="leave out the digit after each word (~3.3 bits "
+                         "less per word)")
     ap.add_argument("-s", "--spaces", action="store_true",
-                    help="separate the groups with spaces instead of '-' "
-                         "(output only; same passphrase strength)")
+                    help="separate the words with spaces instead of '-' "
+                         "(same passphrase strength)")
     args = ap.parse_args()
     if args.count < 1:
         ap.error("--count must be at least 1")
+    if args.words < 1:
+        ap.error("--words must be at least 1")
 
     device = find_port(args.port)
     port = open_port(device)
@@ -165,8 +194,7 @@ def main():
                 port.write(b"\n")
                 timeout = REQUEST_TIMEOUT
             phrase = read_passphrase(port, timeout, bare_ok=args.button)
-            if args.spaces:
-                phrase = SEPARATOR.sub(" ", phrase)
+            phrase = shape(phrase, args.words, args.digits, args.spaces)
             if args.copy:
                 copy_to_clipboard(phrase)
                 info("Copied to clipboard.")

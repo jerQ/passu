@@ -21,9 +21,11 @@ Plug in the board, then:
 
 | Command | Result |
 | --- | --- |
-| `passu` | One passphrase |
+| `passu` | One passphrase of 5 word+digit groups (~81 bits) |
+| `passu -w 8` (`--words`) | 8 groups instead of 5; at most what the board sends (8 by default) |
+| `passu --no-digits` | Words without the digit (~12.9 instead of ~16.2 bits per word) |
+| `passu -s` (`--spaces`) | Words separated by spaces instead of `-` |
 | `passu -n 3` | Three passphrases, one per line |
-| `passu -s` | Groups separated by spaces instead of `-` |
 | `passu --copy` | To the clipboard instead of the terminal (with `-n`, only the last one stays) |
 | `passu -b` (`--button`) | Wait for a BOOT press instead of requesting over serial |
 | `passu -p /dev/ttyACM0` | Use this port (or set `PASSU_PORT`) |

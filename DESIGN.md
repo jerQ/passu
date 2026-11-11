@@ -450,6 +450,14 @@ the whole line matches the passphrase format.
   `passu | something` can't pick up a message by mistake.
 - **`--copy`** puts it on the clipboard instead, to keep it out of terminal
   scrollback.
+- **`--words` and `--no-digits`** shorten the passphrase on the host. The
+  device always sends its configured number of groups (8 by default), and
+  `passu` keeps the first N (default 5, ~81 bits). Taking a prefix, rather
+  than letting anyone choose groups, keeps the result uniform, and keeping
+  the length choice on the host means one firmware serves every site's
+  length rules. Without digits, `-` no longer marks group boundaries
+  unambiguously for hyphenated words (`yo-yo-t-shirt`); `--spaces` avoids
+  that.
 - **`--spaces`** swaps the `-` between groups for a space, for sites or
   habits that prefer it. The separator is fixed, not random, so this
   changes nothing about the passphrase's strength. Only the `-` right after

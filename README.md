@@ -37,20 +37,22 @@ needed. To build it yourself or change its settings, see
 
 ## How strong is it?
 
-A passphrase has 8 groups of word + digit, worth about **130 bits** of
+The board makes 8 groups of word + digit, worth about **130 bits** of
 randomness. That is far more than any attacker can guess.
 
 You can use fewer groups if a site limits the length: take the **first** few
 groups and leave the rest. Don't pick the groups you like best, because that
-makes the result less random.
+makes the result less random. The `passu` command does this for you: it
+gives 5 groups unless you ask for more with `-w`, and can leave out the
+digits with `--no-digits`.
 
-| Groups | Strength |
-| --- | --- |
-| 4 | ~65 bits |
-| 5 | ~81 bits |
-| 6 | ~97 bits |
-| 7 | ~114 bits |
-| 8 | ~130 bits (all of them) |
+| Groups | With digits | Words only |
+| --- | --- | --- |
+| 4 | ~65 bits | ~52 bits |
+| 5 | ~81 bits (`passu` default) | ~65 bits |
+| 6 | ~97 bits | ~78 bits |
+| 7 | ~114 bits | ~90 bits |
+| 8 | ~130 bits (all of them) | ~103 bits |
 
 ## What you need
 
@@ -176,11 +178,16 @@ the board at a time), and run:
 
 | Command | What it does |
 | --- | --- |
-| `passu` | Prints one passphrase |
+| `passu` | Prints one passphrase of 5 words |
+| `passu -w 8` | Uses 8 words instead of 5 (the board makes up to 8) |
+| `passu --no-digits` | Leaves out the digit after each word |
+| `passu -s` | Uses spaces between the words instead of `-` |
 | `passu --copy` | Copies the passphrase to the clipboard instead of showing it |
 | `passu -n 3` | Prints three passphrases |
-| `passu -s` | Uses spaces between the groups instead of `-` |
 | `passu --button` | Waits for you to press BOOT for each passphrase |
+
+Options can be combined: `passu -w 6 --no-digits -s --copy`. The table in
+[How strong is it?](#how-strong-is-it) shows what each length is worth.
 
 `--copy` needs `wl-copy` (Wayland) or `xclip` installed. If it says no
 clipboard tool was found: `sudo dnf install wl-clipboard` (or
