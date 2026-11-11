@@ -1,6 +1,6 @@
 # Using passu
 
-Quick reference for a board flashed with the default settings: no display,
+Quick reference for a board flashed with the default settings:
 8 groups (~130 bits), button on GPIO0 (BOOT), Enter over serial enabled.
 Building and flashing: see [BUILDING.md](BUILDING.md#build-and-flash).
 
@@ -67,6 +67,5 @@ was skipped. If it keeps appearing, check the cable.
 
 - Keep the passphrase out of terminal scrollback: use `--copy`, or clear
   the terminal afterwards.
-- The computer sees every passphrase sent over serial. For passphrases it
-  must never see, use a board with a display and serial printing off
-  ([BUILDING.md, OLED display](BUILDING.md#oled-display-optional)).
+- The computer sees every passphrase sent over serial. Don't generate
+  passphrases on a computer you don't trust.

@@ -17,7 +17,6 @@ security review.
 - [Keeping the passphrase out of memory and logs](#keeping-the-passphrase-out-of-memory-and-logs)
 - [Crashes](#crashes)
 - [Network exposure](#network-exposure)
-- [Display](#display)
 - [Host command](#host-command)
 - [Locking down a device](#locking-down-a-device)
 - [Build and configuration](#build-and-configuration)
@@ -44,8 +43,7 @@ What it trusts:
   [locked down](#locking-down-a-device), which is opt-in
   because it is permanent.
 - **The computer it is plugged into.** The passphrase travels over USB
-  serial in plain text, unless a display is used with serial printing
-  turned off (see [Display](#display)).
+  serial in plain text.
 - **The ESP32's hardware RNG and ESP-IDF's SHA-256.** The health tests and
   conditioning reduce, but cannot remove, this trust.
 
@@ -207,8 +205,7 @@ weak passphrase apart from a strong one.
   the compiler can't optimise away.
 - **What gets wiped:** the passphrase buffer, dice values, the digit, the
   word index, the accepted random byte in each roll, the trigger record, the
-  conditioner's input and output, and, with a display, the framebuffer and
-  I2C buffer (see [Display](#display)). This happens after every
+  conditioner's input and output. This happens after every
   passphrase, and on errors too.
 
 **Why:** a plain `memset()` or assignment to a variable that is never read
@@ -279,58 +276,6 @@ Wi-Fi settings are kept in RAM only, with flash (NVS) storage disabled.
 the device off any network, and nothing persisted means no Wi-Fi
 credentials or settings ever live on the device.
 
-## Display
-
-An optional I2C OLED shows the passphrase on the device itself.
-
-### Passphrases can stay off the computer
-
-**What:** with a display, serial printing of passphrases can be turned off
-(`DW_SERIAL_PASSPHRASE=n`). The serial port then only reports
-`PASSPHRASE-DISPLAYED`. It is on by default so the host command keeps
-working.
-
-**Why:** over serial, the computer and every process on it that can open
-the port is trusted with the passphrase. Shown only on the display, the
-passphrase never leaves the device.
-
-### Framebuffer wiped after every update
-
-**What:** the screen image is drawn in RAM, sent to the display, and wiped
-with `secure_zero` straight away. The I2C transmit buffer is wiped too.
-
-**Why:** the display controller keeps the image in its own memory, so the
-ESP32 has no reason to keep a copy of the passphrase's pixels.
-
-### Automatic clearing
-
-**What:** the passphrase clears after a timeout (default 60 s), or at once
-when the button is pressed while it is shown. Clearing overwrites the
-display's memory with the idle screen.
-
-**Why:** a passphrase left on screen can be read by anyone who walks by,
-long after it was needed. The press-to-clear lets you hide it the moment
-you've copied it.
-
-### No passphrases to nowhere
-
-**What:** if serial printing is off and the display doesn't answer at
-boot, the board halts. If a passphrase can't be drawn, it reports
-`PASSPHRASE-ERROR: display failure` instead of `PASSPHRASE-DISPLAYED`.
-
-**Why:** generating passphrases nobody can see wastes them at best, and at
-worst makes the user think one was shown.
-
-### No outside display library
-
-**What:** the driver (`main/oled.c`), text rendering (`main/display.c`) and
-font are written for this project, a few hundred lines in all. The font
-comes from ASCII art in `tools/gen_font.py`.
-
-**Why:** everything that handles the passphrase is part of what has to be
-trusted and reviewed. A general display library would add far more code
-than these few controllers need.
-
 ## Host command
 
 `tools/passu.py` reads passphrases from the board over USB serial.
@@ -356,8 +301,8 @@ than these few controllers need.
 - **`--spaces`** changes only the output: the fixed `-` between groups
   becomes a space after the format check. The separator never carried any
   entropy, so the strength is the same.
-- **Exits on device errors.** `PASSPHRASE-ERROR`, `DEVICE-ERROR` and
-  `PASSPHRASE-DISPLAYED` lines end the command with an error rather than
+- **Exits on device errors.** `PASSPHRASE-ERROR` and `DEVICE-ERROR`
+  lines end the command with an error rather than
   leaving it waiting. A serial request with no answer within 5 seconds
   also ends with an error.
 - **Drops its reference** to each passphrase after output. Python can't
@@ -482,7 +427,7 @@ steps 3–5 by default. The bootloader then burns every eFuse in steps 2–6
 on the first boot of the signed firmware.
 
 Before you start, make sure the **normal firmware works on this exact
-board** (button, display, `passu`). Afterwards, only a new board helps.
+board** (button, `passu`). Afterwards, only a new board helps.
 
 1. **Create the signing key** in the project root (`*.pem` is in
    `.gitignore`), then back it up:
@@ -579,12 +524,11 @@ produces.
 ### Tests for the security-relevant code
 
 **What:** the portable code (health tests, conditioning, dice, wordlist,
-display rendering, passphrase builder) has a host test suite
+passphrase builder) has a host test suite
 (`make -C test`), meant to run with AddressSanitizer and
 UndefinedBehaviorSanitizer. It covers health-test
 cut-offs and latching, conditioning output and wiping, rejection-sampling
-boundaries, chi-squared distribution checks, wordlist validation, display
-layout and fitting, and wiping output after errors.
+boundaries, chi-squared distribution checks, wordlist validation, and wiping output after errors.
 
 **Why:** these properties are easy to break silently. A small bias or a
 missing wipe doesn't show up in normal use.
@@ -598,13 +542,11 @@ These are not addressed yet, roughly from most to least important.
   access can flash firmware that outputs passphrases they know, while
   looking normal. The [lockdown](#locking-down-a-device)
   fixes this, but it's opt-in, because its eFuse changes are permanent.
-- **Plain serial transport.** Unless a display is used with serial
-  printing turned off, the passphrase reaches the computer in plain text.
+- **Plain serial transport.** The passphrase reaches the computer in plain
+  text.
   Any process that can open the serial port can read it, and, while the
   serial trigger (`DW_SERIAL_TRIGGER`) is on, request one. Copies also
-  remain in the USB-serial driver's buffers and in your terminal. Even
-  with serial printing off, such a process can still trigger a new
-  passphrase, which replaces the one on screen.
+  remain in the USB-serial driver's buffers and in your terminal.
 - **Wi-Fi stack attack surface.** The closed-source Wi-Fi stack runs the
   whole time and receives radio frames, even though the device never
   connects. A noise source that doesn't need the radio

@@ -14,7 +14,6 @@
 
 #include "condition.h"
 #include "dice.h"
-#include "display.h"
 #include "health.h"
 #include "passphrase.h"
 #include "wordlist.h"
@@ -401,123 +400,6 @@ static void test_passphrase(void)
     CHECK(strchr(out, '\0') - out >= 2);
 }
 
-/* ---------- display ---------- */
-
-/* Column x of text row `row` as a 7-char string of '#'/'.', top row first */
-static void column_art(const display_fb_t *fb, unsigned row, unsigned x, char out[8])
-{
-    for (int y = 0; y < 7; y++) out[y] = (fb->page[row][x] >> y) & 1 ? '#' : '.';
-    out[7] = 0;
-}
-
-static bool fb_row_empty(const display_fb_t *fb, unsigned row)
-{
-    return all_zero(fb->page[row], DISPLAY_WIDTH);
-}
-
-/* Render `s` alone on a fresh framebuffer row and compare with `fb`. */
-static bool row_shows(const display_fb_t *fb, unsigned row, const char *s)
-{
-    static display_fb_t ref;
-    display_init(&ref, fb->rows);
-    if (!display_text(&ref, row, 0, s, strlen(s))) return false;
-    return memcmp(ref.page[row], fb->page[row], DISPLAY_WIDTH) == 0;
-}
-
-static void test_display(void)
-{
-    printf("display\n");
-    static display_fb_t fb;
-    char art[8];
-
-    /* glyph pixels: 'A' column 0 is ".######" (rows 1-6), column 2 has
-     * rows 0 and 3 lit */
-    display_init(&fb, 8);
-    CHECK(display_text(&fb, 0, 0, "A", 1));
-    column_art(&fb, 0, 0, art); CHECK(strcmp(art, ".######") == 0);
-    column_art(&fb, 0, 2, art); CHECK(strcmp(art, "#..#...") == 0);
-    column_art(&fb, 0, 5, art); CHECK(strcmp(art, ".......") == 0);   /* gap */
-    /* unknown characters render as '?' */
-    display_init(&fb, 8);
-    CHECK(display_text(&fb, 1, 0, "\x01", 1));
-    CHECK(row_shows(&fb, 1, "?"));
-
-    /* widths: 6 px per char, 4 px per hyphen; clipping refuses */
-    CHECK(display_text_width("ab-c", 4) == 22);
-    CHECK(display_text_width("abcdefghi1-abcdefghi1-", 22) == 128);
-    display_init(&fb, 8);
-    CHECK(display_text(&fb, 0, 2, "abcdefghijklmnopqrstu", 21));        /* 126 px */
-    CHECK(!display_text(&fb, 1, 3, "abcdefghijklmnopqrstu", 21));
-    CHECK(!display_text(&fb, 8, 0, "a", 1));                            /* bad row */
-    CHECK(fb_row_empty(&fb, 1));
-
-    /* 8 groups on 128x64: one per row, with hyphens, hyphenated word intact */
-    const char *p8 = "ramrod7-t-shirt8-sworn3-outtakes9-brunt2-finless8-clump5-zoom2";
-    CHECK(display_passphrase(&fb, p8));
-    CHECK(row_shows(&fb, 0, "ramrod7-"));
-    CHECK(row_shows(&fb, 1, "t-shirt8-"));
-    CHECK(row_shows(&fb, 7, "zoom2"));
-
-    /* 3 groups: centred vertically (rows 2-4) */
-    CHECK(display_passphrase(&fb, "abc1-def2-ghi3"));
-    CHECK(fb_row_empty(&fb, 1) && row_shows(&fb, 2, "abc1-") &&
-          row_shows(&fb, 4, "ghi3") && fb_row_empty(&fb, 5));
-
-    /* 8 longest groups on 128x32: two per row, filling exactly 128 px */
-    display_init(&fb, 4);
-    const char *w = "abcdefghi1-";
-    char p8l[8 * 11 + 1] = "";
-    for (int i = 0; i < 8; i++) strcat(p8l, w);
-    p8l[strlen(p8l) - 1] = 0;                                    /* drop last '-' */
-    CHECK(display_passphrase(&fb, p8l));
-    CHECK(row_shows(&fb, 0, "abcdefghi1-abcdefghi1-"));
-    CHECK(row_shows(&fb, 3, "abcdefghi1-abcdefghi1"));
-    /* 9 groups don't fit in 4 rows: refused, screen left clear */
-    char p9[9 * 11 + 1] = "";
-    for (int i = 0; i < 9; i++) strcat(p9, "ab1-");
-    p9[strlen(p9) - 1] = 0;
-    CHECK(!display_passphrase(&fb, p9));
-    CHECK(all_zero(&fb.page[0][0], sizeof fb.page));
-
-    /* 16 groups on 128x64: two per row */
-    display_init(&fb, 8);
-    char p16[16 * 5 + 1] = "";
-    for (int i = 0; i < 16; i++) strcat(p16, "abc1-");
-    p16[strlen(p16) - 1] = 0;
-    CHECK(display_passphrase(&fb, p16));
-    CHECK(row_shows(&fb, 7, "abc1-abc1"));
-
-    /* malformed input: refused and cleared */
-    CHECK(!display_passphrase(&fb, ""));
-    CHECK(!display_passphrase(&fb, "abc1-def"));                  /* no final digit */
-    CHECK(!display_passphrase(&fb, "abcdefghijklmnopqrstuvwxyz1")); /* too wide */
-    CHECK(all_zero(&fb.page[0][0], sizeof fb.page));
-
-    /* real passphrases always fit 128x64 and 128x32 */
-    bool ok = true;
-    char out[PASSPHRASE_BUF_SIZE(8)];
-    for (int i = 0; i < 2000 && ok; i++) {
-        ok = passphrase_generate(&URANDOM, &wl, 8, out, sizeof out) == PP_OK;
-        display_init(&fb, 8); ok = ok && display_passphrase(&fb, out);
-        display_init(&fb, 4); ok = ok && display_passphrase(&fb, out);
-    }
-    CHECK(ok);
-
-    /* messages: centred both ways; too many lines refused */
-    display_init(&fb, 8);
-    const char *msg[] = { "Press", "button" };
-    CHECK(display_message(&fb, msg, 2));
-    CHECK(fb_row_empty(&fb, 2) && !fb_row_empty(&fb, 3) && !fb_row_empty(&fb, 4));
-    CHECK(fb.page[3][(128 - 30) / 2 - 1] == 0 && fb.page[3][(128 - 30) / 2] != 0);
-    const char *nine[9] = { "a", "a", "a", "a", "a", "a", "a", "a", "a" };
-    CHECK(!display_message(&fb, nine, 9));
-
-    /* wipe clears everything */
-    CHECK(display_passphrase(&fb, p8));
-    display_wipe(&fb);
-    CHECK(all_zero(&fb.page[0][0], sizeof fb.page));
-}
-
 int main(void)
 {
     urandom = fopen("/dev/urandom", "rb");
@@ -527,7 +409,6 @@ int main(void)
     test_health();
     test_condition();
     test_passphrase();
-    test_display();
     printf(failures ? "\n%d FAILURE(S)\n" : "\nALL TESTS PASSED\n", failures);
     return failures ? 1 : 0;
 }

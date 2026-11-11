@@ -46,8 +46,6 @@ RESULT = re.compile(r"PASSPHRASE: (\S+)\s*$")
 ERROR = re.compile(r"PASSPHRASE-ERROR: (.*?)\s*$")
 # printed at boot after a crash, watchdog reset or brownout
 DEVICE_ERROR = re.compile(r"DEVICE-ERROR: (.*?)\s*$")
-# printed instead of the passphrase when the board only shows it on its display
-DISPLAYED = re.compile(r"PASSPHRASE-DISPLAYED:")
 # groups of lowercase word (may contain '-') + one digit, joined by '-'
 FORMAT = re.compile(r"[a-z][a-z-]*[0-9](?:-[a-z][a-z-]*[0-9])*")
 # the '-' between groups: right after a group's digit, never inside a word
@@ -130,9 +128,6 @@ def read_passphrase(port, timeout, bare_ok):
             if m:
                 sys.exit(f"Device reported: {m.group(1)}. Try again; if it "
                          "keeps happening, don't use the device")
-            if DISPLAYED.search(line):
-                sys.exit("The passphrase was shown on the device display only "
-                         "(serial printing is off)")
     sys.exit(f"No answer from the device within {REQUEST_TIMEOUT} s (is "
              "'Generate on Enter in serial console' enabled in the firmware? "
              "If not, use --button)")

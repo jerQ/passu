@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build the release firmware images: one merged .bin per chip, flashed at
-# address 0x0, plus SHA256SUMS. Default settings only (no display, 8 groups,
+# address 0x0, plus SHA256SUMS. Default settings only (8 groups,
 # Enter over serial on).
 #
 #   . ~/esp/esp-idf/export.sh        # or the eim activate script

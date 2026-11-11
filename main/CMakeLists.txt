@@ -58,8 +58,7 @@ endif()
 
 idf_component_register(
     SRCS "main.c" "entropy_radio.c" "health.c" "condition.c" "dice.c" "wordlist.c" "passphrase.c"
-         "display.c" "oled.c"
     INCLUDE_DIRS "."
-    REQUIRES esp_driver_gpio esp_driver_i2c esp_wifi esp_event esp_netif mbedtls
+    REQUIRES esp_driver_gpio esp_wifi esp_event esp_netif mbedtls
     EMBED_TXTFILES "eff_large_wordlist.txt"
 )

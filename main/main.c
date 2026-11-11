@@ -4,10 +4,9 @@
  * Entropy: ESP32 hardware RNG with the Wi-Fi radio running (never connected),
  *          health-checked, then hashed with SHA-256 (condition.c).
  * Words:   EFF large wordlist, embedded in flash and validated at boot.
- * Output:  passphrases printed to the serial console and/or shown on an
- *          optional I2C OLED (display.c, oled.c).
+ * Output:  passphrases printed to the USB serial console.
  * Trigger: press the button (default GPIO0, the BOOT button on most dev
- *          boards) or press Enter in the serial monitor.
+ *          boards) or press Enter in the serial monitor (tools/passu.py).
  */
 #include <stdio.h>
 #include <string.h>
@@ -24,10 +23,8 @@
 #include "sdkconfig.h"
 
 #include "condition.h"
-#include "display.h"
 #include "entropy_radio.h"
 #include "health.h"
-#include "oled.h"
 #include "passphrase.h"
 #include "wordlist.h"
 
@@ -37,13 +34,6 @@ extern const char wordlist_start[] asm("_binary_eff_large_wordlist_txt_start");
 extern const char wordlist_end[]   asm("_binary_eff_large_wordlist_txt_end");
 
 #define DEBOUNCE_MS 300
-
-/* Print passphrases over serial: always without a display, optional with one */
-#if !CONFIG_DW_DISPLAY || CONFIG_DW_SERIAL_PASSPHRASE
-#define SERIAL_PASSPHRASE 1
-#else
-#define SERIAL_PASSPHRASE 0
-#endif
 
 typedef enum { TRIGGER_BUTTON, TRIGGER_SERIAL } trigger_type_t;
 
@@ -56,99 +46,6 @@ static wordlist_t    s_wordlist;      /* ~39 KB index, keep off the stack */
 static checked_rng_t s_checked;
 static conditioned_rng_t s_cond;
 static QueueHandle_t s_triggers;
-
-/* ---------- display ---------- */
-
-#if CONFIG_DW_DISPLAY
-
-#if CONFIG_DW_GROUPS > 2 * (CONFIG_DW_DISPLAY_HEIGHT / 8)
-#error "Too many groups for this display: at most 2 per 8-pixel text row"
-#endif
-
-#define DISPLAY_CLEAR_MS (CONFIG_DW_DISPLAY_CLEAR_S * 1000)
-
-#if CONFIG_DW_DISPLAY_SH1106
-#define DISPLAY_CONTROLLER "SH1106"
-#else
-#define DISPLAY_CONTROLLER "SSD1306"
-#endif
-
-static display_fb_t s_fb;           /* 1 KB, keep off the stack */
-static bool s_display_ok;
-static bool s_crashed;              /* shown on the idle screen until reset */
-
-/* Draw, send, and wipe the framebuffer at once: the display keeps the
- * image, so no copy of a passphrase needs to stay in RAM. */
-static bool show_lines(const char *const *lines, unsigned n)
-{
-    bool ok = s_display_ok && display_message(&s_fb, lines, n) &&
-              oled_flush(&s_fb) == ESP_OK;
-    display_wipe(&s_fb);
-    return ok;
-}
-
-static void display_show_idle(void)
-{
-    char bits[24];
-    snprintf(bits, sizeof(bits), "%d groups, ~%d bits", CONFIG_DW_GROUPS,
-             (CONFIG_DW_GROUPS * 1625) / 100);
-    const char *lines[] = { "Press the button", "for a passphrase", bits,
-                            "Restarted after crash" };
-    show_lines(lines, s_crashed ? 4 : 3);
-}
-
-static void display_show_error(const char *line1, const char *line2)
-{
-    const char *lines[] = { line1, line2 };
-    show_lines(lines, 2);
-}
-
-static bool display_show_passphrase(const char *phrase)
-{
-    bool ok = s_display_ok && display_passphrase(&s_fb, phrase) &&
-              oled_flush(&s_fb) == ESP_OK;
-    display_wipe(&s_fb);
-    return ok;
-}
-
-static void display_start(void)
-{
-    display_init(&s_fb, CONFIG_DW_DISPLAY_HEIGHT / 8);
-    esp_err_t err = oled_init();
-    s_display_ok = err == ESP_OK;
-    if (s_display_ok) {
-        printf("Display: %s 128x%d at I2C 0x%02x (8-bit 0x%02x), SDA GPIO%d, "
-               "SCL GPIO%d\n",
-               DISPLAY_CONTROLLER,
-               CONFIG_DW_DISPLAY_HEIGHT, CONFIG_DW_DISPLAY_I2C_ADDR,
-               CONFIG_DW_DISPLAY_I2C_ADDR << 1, CONFIG_DW_DISPLAY_SDA,
-               CONFIG_DW_DISPLAY_SCL);
-        const char *lines[] = { "Starting..." };
-        show_lines(lines, 1);
-        return;
-    }
-    ESP_LOGE(TAG, "no display at I2C address 0x%02x (SDA GPIO%d, SCL GPIO%d): %s",
-             CONFIG_DW_DISPLAY_I2C_ADDR, CONFIG_DW_DISPLAY_SDA,
-             CONFIG_DW_DISPLAY_SCL, esp_err_to_name(err));
-#if !SERIAL_PASSPHRASE
-    /* no display and serial printing off: passphrases would go nowhere */
-    printf("\nDEVICE-ERROR: display not found, halting\n");
-    for (;;) {
-        vTaskDelay(portMAX_DELAY);
-    }
-#endif
-}
-
-#else  /* no display */
-
-#define DISPLAY_CLEAR_MS 0
-static bool s_crashed;
-static void display_show_idle(void) {}
-static void display_show_error(const char *a, const char *b) { (void)a; (void)b; }
-static bool display_show_passphrase(const char *p) { (void)p; return false; }
-static void display_start(void) {}
-
-#endif
 
 /* ---------- wordlist ---------- */
 
@@ -197,7 +94,6 @@ static void wordlist_load_or_halt(void)
     return;
 
 halt:
-    display_show_error("Wordlist invalid", "See serial output");
     for (;;) {
         vTaskDelay(portMAX_DELAY);
     }
@@ -263,7 +159,6 @@ static void report_previous_crash(void)
     case ESP_RST_BROWNOUT: why = "brownout"; break;
     default:               return;
     }
-    s_crashed = true;
     printf("\nDEVICE-ERROR: previous run crashed (%s), device restarted\n", why);
 }
 
@@ -284,7 +179,6 @@ static void generator_task(void *arg)
     const rng_t rng = conditioned_rng_as_rng(&s_cond);
     char phrase[PASSPHRASE_BUF_SIZE(PASSPHRASE_MAX_GROUPS)];
     TickType_t last_button = 0;
-    bool shown = false;     /* a passphrase is on the display */
 
     /* Unbuffered, so no copy of the passphrase lingers in stdout's buffer
      * after `phrase` is wiped. */
@@ -292,11 +186,7 @@ static void generator_task(void *arg)
 
     for (;;) {
         trigger_t t;
-        /* while a passphrase is shown, clear it after a timeout */
-        TickType_t wait = shown ? pdMS_TO_TICKS(DISPLAY_CLEAR_MS) : portMAX_DELAY;
-        if (xQueueReceive(s_triggers, &t, wait) != pdTRUE) {
-            display_show_idle();
-            shown = false;
+        if (xQueueReceive(s_triggers, &t, portMAX_DELAY) != pdTRUE) {
             continue;
         }
 
@@ -306,13 +196,6 @@ static void generator_task(void *arg)
                 continue;   /* contact bounce */
             }
             last_button = now;
-            if (shown) {
-                /* a press while a passphrase is shown only clears it */
-                display_show_idle();
-                shown = false;
-                secure_zero(&t, sizeof(t));
-                continue;
-            }
         }
 
         bool tagged = t.type == TRIGGER_SERIAL;
@@ -325,28 +208,15 @@ static void generator_task(void *arg)
          * person reading the serial monitor. A serial request (the host
          * command) gets a tagged line so it can pick the result out of the
          * stream: "PASSPHRASE: ...". Status and errors are always tagged
-         * ("PASSPHRASE-DISPLAYED: ...", "PASSPHRASE-ERROR: ...") so they can
-         * never pass for a passphrase. */
-        shown = false;
+         * ("PASSPHRASE-ERROR: ...") so they can never pass for a
+         * passphrase. */
         if (err == PP_OK) {
-            shown = display_show_passphrase(phrase);
-            if (!shown) {
-                display_show_idle();    /* don't leave a partial image */
-            }
-            if (SERIAL_PASSPHRASE) {
-                printf(tagged ? "\nPASSPHRASE: %s\n" : "%s\n", phrase);
-            } else if (shown) {
-                printf("\nPASSPHRASE-DISPLAYED: shown on the device display\n");
-            } else {
-                printf("\nPASSPHRASE-ERROR: display failure\n");
-            }
+            printf(tagged ? "\nPASSPHRASE: %s\n" : "%s\n", phrase);
         } else if (s_checked.health.failed) {
             printf("\nPASSPHRASE-ERROR: entropy health failure (%s), reset "
                    "the device\n", s_checked.health.fail_reason);
-            display_show_error("Entropy failure", "Reset the device");
         } else {
             printf("\nPASSPHRASE-ERROR: %s\n", passphrase_strerror(err));
-            display_show_error("Generation failed", "Press to try again");
         }
         fflush(stdout);
         secure_zero(phrase, sizeof(phrase));
@@ -357,7 +227,6 @@ void app_main(void)
 {
     report_previous_crash();
     printf("\npassu - ESP32 diceware passphrase generator (proof of concept)\n");
-    display_start();
 
     wordlist_load_or_halt();
 
@@ -366,7 +235,6 @@ void app_main(void)
     if (!checked_rng_startup(&s_checked)) {
         ESP_LOGE(TAG, "entropy startup self-test failed: %s",
                  s_checked.health.fail_reason);
-        display_show_error("Entropy failure", "Reset the device");
         for (;;) {
             vTaskDelay(portMAX_DELAY);
         }
@@ -378,7 +246,6 @@ void app_main(void)
     s_triggers = xQueueCreate(8, sizeof(trigger_t));
     configASSERT(s_triggers);
 
-    display_show_idle();     /* before the generator task owns the display */
     button_init();
     xTaskCreate(generator_task, "generator", 4096, NULL, 5, NULL);
 #if CONFIG_DW_SERIAL_TRIGGER

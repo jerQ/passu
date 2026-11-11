@@ -3,8 +3,6 @@
 > Just want to use passu? See [README.md](README.md): download ready-made
 > firmware, flash it from the browser, and get passphrases.
 
-![passu: an ESP32 dev board with an OLED display showing a passphrase](docs/passu.jpg)
-
 > [!CAUTION]
 > This is a proof of concept. It works and is tested, but it has not had an
 > independent security review. There are no guarantees of security or of the
@@ -21,7 +19,7 @@ random number generator:
 2. Build the firmware.
 3. Flash the board.
 4. Press BOOT, or run `passu` on the computer.
-5. Get your passphrase over USB serial, or on an optional OLED display.
+5. Get your passphrase over USB serial.
 
 [USAGE.md](USAGE.md): A one-page quick reference
 
@@ -38,7 +36,6 @@ random number generator:
 - [Build and flash](#build-and-flash)
 - [Using it](#using-it)
 - [Configuration](#configuration)
-- [OLED display (optional)](#oled-display-optional)
 - [Locking down a device](#locking-down-a-device)
 - [Tests](#tests)
 - [Troubleshooting](#troubleshooting)
@@ -88,8 +85,8 @@ the firmware generates can be changed in `idf.py menuconfig` → *passu* →
 5. **EFF wordlist.** Five rolls such as `24315` pick one of 7776 words. The
    list is built into the firmware; its SHA-256 is pinned at build time and
    checked again at boot, along with every line.
-6. **Output.** The passphrase goes to the serial port, to an optional OLED, or
-   both. Then every buffer is wiped.
+6. **Output.** The passphrase goes to the USB serial port. Then every buffer
+   is wiped.
 
 If any check fails, the device latches an error and refuses to generate
 anything until it is reset. No passphrase is better than a bad one.
@@ -103,8 +100,6 @@ step and the alternatives that were rejected.
 
 - An ESP32 dev board; see [Supported boards](#supported-boards).
 - A USB **data** cable. Charge-only cables don't work.
-- Optional: a 128x64 or 128x32 I2C OLED display (see
-  [OLED display](#oled-display-optional)).
 
 **Software**
 
@@ -117,12 +112,12 @@ step and the alternatives that were rejected.
 
 ### Supported boards
 
-| Chip | Status | `set-target` | USB serial port | Button (default) | OLED SDA / SCL (default) | Lockdown profile |
-| --- | --- | --- | --- | --- | --- | --- |
-| ESP32 (classic, tested with ESP32-D0WD-V3) | Tested | `esp32` | `/dev/ttyUSB0` (USB-UART bridge) | GPIO0 (BOOT) | GPIO21 / GPIO22 | Yes |
-| ESP32-C3, native USB | Tested | `esp32c3` | `/dev/ttyACM0` (built-in USB-Serial/JTAG) | GPIO9 (BOOT) | GPIO4 / GPIO5 | No |
-| ESP32-C3, USB-UART bridge | Untested | `esp32c3` | `/dev/ttyUSB0` | GPIO9 (BOOT) | GPIO4 / GPIO5 | No |
-| Other chips with Wi-Fi (S3, …) | Untested | | | Check the board | Check the board | No |
+| Chip | Status | `set-target` | USB serial port | Button (default) | Lockdown profile |
+| --- | --- | --- | --- | --- | --- |
+| ESP32 (classic, tested with ESP32-D0WD-V3) | Tested | `esp32` | `/dev/ttyUSB0` (USB-UART bridge) | GPIO0 (BOOT) | Yes |
+| ESP32-C3, native USB | Tested | `esp32c3` | `/dev/ttyACM0` (built-in USB-Serial/JTAG) | GPIO9 (BOOT) | No |
+| ESP32-C3, USB-UART bridge | Untested | `esp32c3` | `/dev/ttyUSB0` | GPIO9 (BOOT) | No |
+| Other chips with Wi-Fi (S3, …) | Untested | | | Check the board | No |
 
 Notes:
 
@@ -131,7 +126,7 @@ Notes:
   console; a C3 board with a USB-UART bridge needs
   `CONFIG_ESP_CONSOLE_UART_DEFAULT=y` instead.
 - **Other chips** may work after `idf.py set-target`. Check that the button
-  and display GPIOs exist on the board, and set them in menuconfig.
+  GPIO exists on the board, and set them in menuconfig.
 - **Lockdown** (`sdkconfig.secure`) is written for the classic ESP32 only.
   Don't use it on other chips.
 - **Flash size:** the firmware expects at least 4 MB of flash, which the
@@ -207,9 +202,9 @@ idf.py set-target esp32          # or esp32c3; see Supported boards
 
 ### 5. Configure (optional)
 
-The defaults in `sdkconfig.defaults` work as they are: no display, 8 groups,
-button on GPIO0. To change something, for example to enable the OLED, open
-the configuration menu:
+The defaults in `sdkconfig.defaults` work as they are: 8 groups, button on
+GPIO0. To change something, for example the number of groups, open the
+configuration menu:
 
 ```bash
 idf.py menuconfig                # → passu
@@ -257,10 +252,6 @@ Entropy: radio running, startup health test passed
 Press the button on GPIO0 or Enter for a passphrase (8 groups, ~130 bits)
 ```
 
-With a display, the banner also shows the controller, size and address, for
-example `Display: SSD1306 128x64 at I2C 0x3c (8-bit 0x78), SDA GPIO21, SCL
-GPIO22`.
-
 ### Useful `idf.py` commands
 
 | Command | What it does |
@@ -300,16 +291,16 @@ CONFIG_DW_SERIAL_TRIGGER=n
 
 ### Several configurations side by side
 
-To keep more than one configuration (for example with and without a display)
+To keep more than one configuration (for example 8 and 10 groups)
 without overwriting `build/` and `sdkconfig`, give each its own build
 directory and config file. Extra settings go in a small file layered on top
 of the defaults:
 
 ```bash
-printf 'CONFIG_DW_DISPLAY=y\n' > display.cfg
-idf.py -B build-display -D SDKCONFIG=build-display/sdkconfig \
-       -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;display.cfg" build
-idf.py -B build-display -D SDKCONFIG=build-display/sdkconfig -p /dev/ttyUSB0 flash
+printf 'CONFIG_DW_GROUPS=10\n' > groups10.cfg
+idf.py -B build-groups10 -D SDKCONFIG=build-groups10/sdkconfig \
+       -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;groups10.cfg" build
+idf.py -B build-groups10 -D SDKCONFIG=build-groups10/sdkconfig -p /dev/ttyUSB0 flash
 ```
 
 ## Using it
@@ -318,8 +309,8 @@ Short version for a default build: [USAGE.md](USAGE.md).
 
 ### BOOT button
 
-Press BOOT (GPIO0) on the board. The passphrase appears in the serial monitor,
-on the OLED, or both.
+Press BOOT (GPIO0) on the board. The passphrase appears in the serial
+monitor.
 
 ### Host command
 
@@ -356,9 +347,8 @@ How it behaves:
   `--button` waits for each press until you press Ctrl+C.
 - **Keeps stdout clean.** Only passphrases go to stdout; prompts and errors go
   to stderr, so `passu > file` and `passu | cmd` pass on just the passphrase.
-- **Fails loudly.** A health-test failure, a crash notice, no answer, an
-  unplugged board, or a passphrase shown only on the display all exit with a
-  non-zero status and no passphrase.
+- **Fails loudly.** A health-test failure, a crash notice, no answer, or an
+  unplugged board all exit with a non-zero status and no passphrase.
 - `--copy` uses `wl-copy` (Wayland), `xclip` or `xsel`, whichever is
   installed.
 
@@ -373,7 +363,6 @@ tagged:
 <passphrase>                                          (BOOT press)
 PASSPHRASE: <passphrase>                              (Enter / host command)
 PASSPHRASE-ERROR: <reason>
-PASSPHRASE-DISPLAYED: shown on the device display     (serial printing off)
 DEVICE-ERROR: <reason>                                (crash notice at boot)
 ```
 
@@ -404,66 +393,6 @@ stored RF calibration data, so the boot log has no warnings. A board with
 less than 4 MB of flash won't boot unless you lower the flash size in
 menuconfig (*Serial flasher config* → *Flash size*).
 
-## OLED display (optional)
-
-With a display, passu doesn't need a computer at all. Power it from a USB
-charger, press the button, and read the passphrase off the screen. For
-passphrases the computer must never see, turn serial printing off: the
-passphrase then only ever exists on the device.
-
-Supported are the common 128-pixel-wide monochrome I2C modules:
-
-| Module | Controller | Setting |
-| --- | --- | --- |
-| 0.96" 128x64, 0.91" 128x32 | SSD1306 | SSD1306 / SSD1309 |
-| 2.42" 128x64 | SSD1309 | SSD1306 / SSD1309 |
-| 1.3" 128x64 | SH1106 (usually) | SH1106 |
-
-If a 1.3" module shows a stripe of noise at one edge, or the image is shifted
-by 2 pixels, switch the controller setting.
-
-**Wiring** (default pins, changeable in menuconfig):
-
-| Display | ESP32 |
-| --- | --- |
-| VCC | 3V3 |
-| GND | GND |
-| SDA | GPIO21 |
-| SCL | GPIO22 |
-
-Enable it in `idf.py menuconfig` → *passu* → *OLED display*, or in
-`sdkconfig.defaults`:
-
-```ini
-CONFIG_DW_DISPLAY=y
-CONFIG_DW_DISPLAY_SH1106=y        # only for SH1106 modules
-CONFIG_DW_SERIAL_PASSPHRASE=n     # keep passphrases off the serial port
-```
-
-| Option | Default | Description |
-| --- | --- | --- |
-| Display controller | SSD1306 / SSD1309 | Or SH1106 |
-| Display size | 128x64 | 128x32 fits up to 8 groups |
-| I2C address | `0x3C` | 7-bit address; some modules use `0x3D`. A module marked `0x78` is `0x3C`, and `0x7A` is `0x3D` |
-| SDA / SCL GPIO | `21` / `22` | |
-| Rotate 180 degrees | off | |
-| Clear the passphrase after | 60 s | 5–600 s |
-| Also print passphrases over serial | on | Turn off to keep passphrases off the computer |
-
-How it behaves:
-
-- **Layout:** on a 128x64 display each group gets its own line, hyphen
-  included, so you can type it straight off the screen. With more groups than
-  lines (or on 128x32), two groups share a line.
-- **Clearing:** the passphrase clears after the timeout, or at once when you
-  press the button while it is shown. The next press makes a new one. Enter in
-  the serial console (and `passu`) always makes a new one.
-- **Serial printing off:** the serial port only says `PASSPHRASE-DISPLAYED`,
-  and `passu` reports that the passphrase is on the display. If the display
-  isn't found at boot, the board halts, since passphrases would have nowhere
-  to go. With serial printing on, it logs a warning and carries on without the
-  display.
-
 ## Locking down a device
 
 Out of the box, anyone with USB access can flash different firmware onto the
@@ -479,7 +408,7 @@ Secure Boot V2 and turns off USB flashing.
 ## Tests
 
 The platform-independent code (health tests, conditioning, dice, wordlist,
-passphrase builder, display layout) has a host test suite that runs with
+passphrase builder) has a host test suite that runs with
 AddressSanitizer and UndefinedBehaviorSanitizer. It needs OpenSSL's headers
 for SHA-256 (Fedora: `openssl-devel`):
 
@@ -500,8 +429,6 @@ What the tests cover, and why: [DESIGN.md](DESIGN.md#testing).
 | No `/dev/ttyUSB*` or `/dev/ttyACM*` appears | Charge-only cable, or the board needs a different USB port |
 | `passu`: port busy | Close `idf.py monitor` |
 | `passu`: several possible devices | Pick one with `--port` |
-| `no display at I2C address ...` | The boot log then lists what the I2C scan found. `device at 0x3d`: set that address in menuconfig. No devices: check wiring (a loose or broken wire is the usual cause) and 3.3 V power. A 7-pin module (D0/D1/RES/DC/CS) ships in SPI mode; for I2C it needs its resistors moved, RES tied high, DC and CS to GND |
-| OLED stays dark, no error in the boot log | The display answers but shows nothing: try the other controller (SSD1306 / SH1106) in menuconfig |
 | `PASSPHRASE-ERROR: entropy health failure` | Reset the board. If it repeats, the RNG or radio isn't working; don't use the device |
 | `DEVICE-ERROR: previous run crashed` | The device crashed and restarted; no passphrase was produced. Try again. If it repeats, don't use the device |
 | Change in `sdkconfig.defaults` has no effect | An existing `sdkconfig` overrides it: `rm sdkconfig`, then `idf.py set-target esp32` and rebuild |
@@ -518,5 +445,3 @@ following:
   [CC BY 3.0 US](https://creativecommons.org/licenses/by/3.0/us/). See the
   [EFF's diceware page](https://www.eff.org/dice) and
   [copyright policy](https://www.eff.org/copyright).
-- **Display font** (`main/font6x8.h`, generated by `tools/gen_font.py`):
-  drawn for this project and dedicated to the public domain.
