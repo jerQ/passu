@@ -301,12 +301,14 @@ credentials or settings ever live on the device.
 - **`--spaces`** changes only the output: the fixed `-` between groups
   becomes a space after the format check. The separator never carried any
   entropy, so the strength is the same.
-- **`--words` and `--no-digits` shorten the passphrase after the format
-  check.** `--words N` keeps the **first** N groups the device sent (5 by
-  default), never a chosen subset, so the result stays uniformly random.
-  Each group dropped costs ~16.2 bits and each digit dropped ~3.3 bits: the
-  default 5 groups are ~81 bits, 5 words without digits ~65 bits. Asking
-  for more groups than the device sent is an error, not padding.
+- **`--words` and `--no-digits` shape the passphrase after the format
+  check.** `--words N` (1–32, default 5) keeps the **first** N groups,
+  never a chosen subset, so the result stays uniformly random. When N is
+  more than one reply holds, `passu` requests more replies (or, with
+  `--button`, asks for more presses) and joins their groups. Every group
+  is generated independently, so joined replies are as strong as one long
+  passphrase: ~16.2 bits per group, ~12.9 without its digit. The default
+  5 groups are ~81 bits, 5 words without digits ~65 bits.
 - **Exits on device errors.** `PASSPHRASE-ERROR` and `DEVICE-ERROR`
   lines end the command with an error rather than
   leaving it waiting. A serial request with no answer within 5 seconds

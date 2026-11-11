@@ -329,7 +329,7 @@ Then plug in the board and run:
 | Command | Result |
 | --- | --- |
 | `passu` | One passphrase of 5 word+digit groups (~81 bits) |
-| `passu -w 8` | 8 groups instead of 5; at most the firmware's *Number of word+digit groups* |
+| `passu -w 8` | 8 groups instead of 5; 1 to 32. More than the firmware's *Number of word+digit groups* are collected over several requests (or BOOT presses) |
 | `passu --no-digits` | Words without the digit after each |
 | `passu -s` | Words separated by spaces instead of `-` |
 | `passu -n 3` | Three passphrases, one per line; no button press needed |

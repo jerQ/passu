@@ -3,15 +3,18 @@
 Get passphrases from a passu device (ESP32 diceware generator) over USB serial.
 
     passu              print one passphrase of 5 words (requested over serial)
-    passu -w 8         use 8 words instead of 5
+    passu -w 8         use 8 words instead of 5 (up to 32)
     passu --no-digits  leave out the digit after each word
     passu --spaces     separate the words with spaces instead of '-'
     passu -n 3         print three passphrases
     passu --button     wait for a BOOT button press for each passphrase
     passu --copy       copy to the clipboard instead of printing
 
-The device sends 8 word+digit groups by default; --words keeps the first N.
-Each word is worth ~12.9 bits and each digit ~3.3 bits, so 5 words with
+The device sends 8 word+digit groups per request by default. --words keeps
+the first N; for more words than one request gives, passu makes more requests
+(or, with --button, asks for more presses) and joins the groups. Each group
+is independent, so this is as strong as one long passphrase. Each word is
+worth ~12.9 bits and each digit ~3.3 bits, so 5 words with
 digits are ~81 bits and without digits ~65 bits.
 
 The passphrase goes to stdout; prompts and errors go to stderr, so
@@ -57,6 +60,7 @@ FORMAT = re.compile(r"[a-z][a-z-]*[0-9](?:-[a-z][a-z-]*[0-9])*")
 # the '-' between groups: right after a group's digit, never inside a word
 SEPARATOR = re.compile(r"(?<=[0-9])-")
 DEFAULT_WORDS = 5
+MAX_WORDS = 32
 
 
 def info(msg):
@@ -109,14 +113,9 @@ def copy_to_clipboard(text):
     sys.exit("No clipboard tool found (install wl-clipboard or xclip)")
 
 
-def shape(phrase, words, digits, spaces):
+def shape(groups, words, digits, spaces):
     """Keep the first `words` groups (taking a prefix keeps them uniformly
     random), optionally drop each group's digit, and join them."""
-    groups = SEPARATOR.split(phrase)
-    if len(groups) < words:
-        sys.exit(f"The device sent {len(groups)} words, fewer than the "
-                 f"{words} asked for (raise 'Number of word+digit groups' "
-                 "in the firmware, or use a smaller --words)")
     groups = groups[:words]
     if not digits:
         groups = [g[:-1] for g in groups]
@@ -166,8 +165,9 @@ def main():
     ap.add_argument("--copy", action="store_true",
                     help="copy to clipboard instead of printing (last one if -n > 1)")
     ap.add_argument("-w", "--words", type=int, default=DEFAULT_WORDS,
-                    help=f"number of words (default {DEFAULT_WORDS}); the first "
-                         "N of the groups the device sends")
+                    help=f"number of words, 1-{MAX_WORDS} (default "
+                         f"{DEFAULT_WORDS}); more than the device sends per "
+                         "request are collected over several requests")
     ap.add_argument("--no-digits", dest="digits", action="store_false",
                     help="leave out the digit after each word (~3.3 bits "
                          "less per word)")
@@ -177,8 +177,8 @@ def main():
     args = ap.parse_args()
     if args.count < 1:
         ap.error("--count must be at least 1")
-    if args.words < 1:
-        ap.error("--words must be at least 1")
+    if not 1 <= args.words <= MAX_WORDS:
+        ap.error(f"--words must be between 1 and {MAX_WORDS}")
 
     device = find_port(args.port)
     port = open_port(device)
@@ -186,15 +186,24 @@ def main():
         time.sleep(0.1)
         port.reset_input_buffer()          # drop anything printed before we came
         for i in range(args.count):
-            if args.button:
-                label = f" ({i + 1}/{args.count})" if args.count > 1 else ""
-                info(f"Press BOOT on the ESP32{label}...  (Ctrl+C to cancel)")
-                timeout = None
-            else:
-                port.write(b"\n")
-                timeout = REQUEST_TIMEOUT
-            phrase = read_passphrase(port, timeout, bare_ok=args.button)
-            phrase = shape(phrase, args.words, args.digits, args.spaces)
+            groups = []
+            while len(groups) < args.words:
+                if args.button:
+                    label = f" ({i + 1}/{args.count})" if args.count > 1 else ""
+                    if groups:
+                        info(f"Press BOOT again for more words "
+                             f"({len(groups)}/{args.words} so far)...")
+                    else:
+                        info(f"Press BOOT on the ESP32{label}...  "
+                             "(Ctrl+C to cancel)")
+                    timeout = None
+                else:
+                    port.write(b"\n")
+                    timeout = REQUEST_TIMEOUT
+                groups += SEPARATOR.split(
+                    read_passphrase(port, timeout, bare_ok=args.button))
+            phrase = shape(groups, args.words, args.digits, args.spaces)
+            groups = None
             if args.copy:
                 copy_to_clipboard(phrase)
                 info("Copied to clipboard.")

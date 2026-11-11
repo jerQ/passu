@@ -22,7 +22,7 @@ Plug in the board, then:
 | Command | Result |
 | --- | --- |
 | `passu` | One passphrase of 5 word+digit groups (~81 bits) |
-| `passu -w 8` (`--words`) | 8 groups instead of 5; at most what the board sends (8 by default) |
+| `passu -w 8` (`--words`) | 8 groups instead of 5; 1 to 32. Above 8, `passu` makes several requests (or asks for several BOOT presses) and joins them |
 | `passu --no-digits` | Words without the digit (~12.9 instead of ~16.2 bits per word) |
 | `passu -s` (`--spaces`) | Words separated by spaces instead of `-` |
 | `passu -n 3` | Three passphrases, one per line |

@@ -43,8 +43,8 @@ randomness. That is far more than any attacker can guess.
 You can use fewer groups if a site limits the length: take the **first** few
 groups and leave the rest. Don't pick the groups you like best, because that
 makes the result less random. The `passu` command does this for you: it
-gives 5 groups unless you ask for more with `-w`, and can leave out the
-digits with `--no-digits`.
+gives 5 groups unless you ask for a different number with `-w` (up to 32),
+and can leave out the digits with `--no-digits`.
 
 | Groups | With digits | Words only |
 | --- | --- | --- |
@@ -179,7 +179,7 @@ the board at a time), and run:
 | Command | What it does |
 | --- | --- |
 | `passu` | Prints one passphrase of 5 words |
-| `passu -w 8` | Uses 8 words instead of 5 (the board makes up to 8) |
+| `passu -w 8` | Uses 8 words instead of 5 (anything from 1 to 32) |
 | `passu --no-digits` | Leaves out the digit after each word |
 | `passu -s` | Uses spaces between the words instead of `-` |
 | `passu --copy` | Copies the passphrase to the clipboard instead of showing it |

@@ -450,9 +450,11 @@ the whole line matches the passphrase format.
   `passu | something` can't pick up a message by mistake.
 - **`--copy`** puts it on the clipboard instead, to keep it out of terminal
   scrollback.
-- **`--words` and `--no-digits`** shorten the passphrase on the host. The
+- **`--words` and `--no-digits`** shape the passphrase on the host. The
   device always sends its configured number of groups (8 by default), and
-  `passu` keeps the first N (default 5, ~81 bits). Taking a prefix, rather
+  `passu` keeps the first N (1–32, default 5, ~81 bits). For more groups
+  than one reply holds, it requests more replies and joins them; each
+  group is independent, so this needs no firmware change. Taking a prefix, rather
   than letting anyone choose groups, keeps the result uniform, and keeping
   the length choice on the host means one firmware serves every site's
   length rules. Without digits, `-` no longer marks group boundaries
