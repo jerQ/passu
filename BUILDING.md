@@ -354,6 +354,21 @@ How it behaves:
 - `--copy` uses `wl-copy` (Wayland), `xclip` or `xsel`, whichever is
   installed.
 
+#### Go version (single binary)
+
+`host/` has the same command written in Go: identical options and messages,
+but one static binary with no Python or pyserial needed. Build it with Go
+1.25 or newer:
+
+```bash
+cd host
+CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o build/passu .
+go test ./...                    # parsing and request logic, no board needed
+install -m 755 build/passu ~/.local/bin/passu
+```
+
+It also builds for Windows (`GOOS=windows`), but that isn't tested yet.
+
 ### Serial monitor
 
 In `idf.py monitor`, press **BOOT** or **Enter** to generate. A BOOT press
@@ -417,6 +432,8 @@ for SHA-256 (Fedora: `openssl-devel`):
 ```bash
 make -C test
 ```
+
+The Go host command has its own tests: `cd host && go test ./...`.
 
 What the tests cover, and why: [DESIGN.md](DESIGN.md#testing).
 

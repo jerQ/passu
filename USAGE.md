@@ -15,13 +15,6 @@ chmod +x tools/passu.py
 ln -s "$PWD/tools/passu.py" ~/.local/bin/passu
 ```
 
-## One-time setup (Windows)
-
-Copy `tools/passu.ps1` and `tools/passu.cmd` into one folder on your
-`PATH` (the README has a paste-in script). `passu.cmd` runs the script with
-`-ExecutionPolicy Bypass`, so no policy change is needed. Windows
-PowerShell 5.1, built into Windows 10/11, is enough.
-
 ## Get a passphrase
 
 Plug in the board, then:
@@ -36,10 +29,6 @@ Plug in the board, then:
 | `passu --copy` | To the clipboard instead of the terminal (with `-n`, only the last one stays) |
 | `passu -b` (`--button`) | Wait for a BOOT press instead of requesting over serial |
 | `passu -p /dev/ttyACM0` | Use this port (or set `PASSU_PORT`) |
-
-On Windows the options are PowerShell-style: `-w 8` (`-Words`),
-`-NoDigits`, `-s` (`-Spaces`), `-n 3` (`-Count`), `-Copy`, `-b`
-(`-Button`), `-p COM5` (`-Port`), and `PASSU_PORT` works too. The messages below are the same.
 
 Only the passphrase goes to stdout, so `passu > file` and `passu | cmd`
 are safe. Messages and errors go to stderr.
@@ -62,12 +51,12 @@ In `idf.py -p /dev/ttyUSB0 monitor`:
 | `pyserial is missing` | Install it (setup above) |
 | `No ESP32 found` | Use a data cable, or give the port with `-p` |
 | `Several possible devices` | Pick one with `-p` |
-| `... is busy` | Close `idf.py monitor` or the web flasher console (only one program can use the port). On Windows this also covers a port you have no access to |
+| `... is busy` | Close `idf.py monitor` (only one program can use the port) |
 | `No permission for ...` | Join the `dialout` group (setup above) |
 | `Cannot open ...` | The port went away or is wrong; replug, or check `-p` |
 | `No answer from the device within 5 s` | Board not running, wrong port, or serial trigger off in the firmware; press EN and retry, or use `--button` |
 | `Lost connection to the device` | Cable unplugged or loose; reconnect and retry |
-| `No clipboard tool found` | Install `wl-clipboard` (Wayland) or `xclip` for `--copy` (Linux only) |
+| `No clipboard tool found` | Install `wl-clipboard` (Wayland) or `xclip` for `--copy` |
 | `Device reported an error: entropy health failure ...` | RNG fault. Reset the board; if it repeats, don't use it |
 | `Device reported an error: ...` (other) | Generation failed; nothing was produced. Retry; if it repeats, don't use it |
 | `Device reported: previous run crashed ...` | The board restarted after a crash. Retry; if it repeats, don't use it |
