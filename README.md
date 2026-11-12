@@ -30,6 +30,7 @@ needed. To build it yourself or change its settings, see
 - [Install passu on the board](#install-passu-on-the-board)
 - [Get a passphrase with the BOOT button](#get-a-passphrase-with-the-boot-button)
 - [Get a passphrase with the passu command (Linux)](#get-a-passphrase-with-the-passu-command-linux)
+- [Get a passphrase with the passu command (Windows)](#get-a-passphrase-with-the-passu-command-windows)
 - [Good habits](#good-habits)
 - [Troubleshooting](#troubleshooting)
 - [More information](#more-information)
@@ -135,8 +136,8 @@ This works on any computer with Chrome or Edge:
    Press again for a new one.
 4. Copy the passphrase, then close the page.
 
-On Linux, the `passu` command below can also wait for BOOT presses:
-`passu --button`.
+The `passu` command below can also wait for BOOT presses:
+`passu --button` on Linux, `passu -Button` on Windows.
 
 ## Get a passphrase with the passu command (Linux)
 
@@ -195,9 +196,61 @@ clipboard tool was found: `sudo dnf install wl-clipboard` (or
 
 The full list of options and messages is in [USAGE.md](USAGE.md).
 
+## Get a passphrase with the passu command (Windows)
+
+The Windows version of `passu` is a PowerShell script. It needs nothing
+extra: Windows 10 and 11 already have PowerShell.
+
+### One-time setup
+
+1. Plug in the board. Windows usually installs the USB driver by itself.
+   If the board doesn't appear under **Ports (COM & LPT)** in Device
+   Manager, install the driver for its USB chip (CP210x from Silicon Labs,
+   or CH340 from WCH).
+
+2. Open **PowerShell** (not as administrator) and paste:
+
+   ```powershell
+   $dir = "$env:LOCALAPPDATA\passu"
+   New-Item -ItemType Directory -Force $dir | Out-Null
+   foreach ($f in 'passu.ps1', 'passu.cmd') {
+       Invoke-WebRequest "https://raw.githubusercontent.com/jerQ/passu/main/tools/$f" -OutFile "$dir\$f"
+   }
+   $path = [Environment]::GetEnvironmentVariable('Path', 'User')
+   if ($path -notlike "*$dir*") {
+       [Environment]::SetEnvironmentVariable('Path', "$path;$dir", 'User')
+   }
+   ```
+
+3. Close PowerShell and open it again, so it finds the new command.
+
+`passu.cmd` starts `passu.ps1` for you, so you don't need to change
+PowerShell's script execution policy. `passu` works in PowerShell and in
+the Command Prompt.
+
+### Use it
+
+Plug in the board, close any open serial terminal (only one program can use
+the board at a time), and run:
+
+| Command | What it does |
+| --- | --- |
+| `passu` | Prints one passphrase of 5 words |
+| `passu -w 8` | Uses 8 words instead of 5 (anything from 1 to 32) |
+| `passu -NoDigits` | Leaves out the digit after each word |
+| `passu -s` | Uses spaces between the words instead of `-` |
+| `passu -Copy` | Copies the passphrase to the clipboard instead of showing it |
+| `passu -n 3` | Prints three passphrases |
+| `passu -Button` | Waits for you to press BOOT for each passphrase |
+| `passu -Port COM5` | Uses this port, if passu can't pick the board by itself |
+
+Options can be combined: `passu -w 6 -NoDigits -s -Copy`.
+
+The messages are the same as on Linux; see [USAGE.md](USAGE.md).
+
 ## Good habits
 
-- **Don't leave passphrases on screen.** Use `passu --copy`, or clear the
+- **Don't leave passphrases on screen.** Use `passu --copy` (`passu -Copy` on Windows), or clear the
   terminal or close the browser page afterwards.
 - **The computer sees the passphrase.** It travels over USB to the computer.
   If you don't trust the computer, don't use it to generate passphrases.
@@ -209,7 +262,7 @@ The full list of options and messages is in [USAGE.md](USAGE.md).
 
 | Problem | What to do |
 | --- | --- |
-| The web flasher doesn't list the board | Use another USB cable (it may be charge-only) or another USB port. On Linux, check that you are in the `dialout` group |
+| The web flasher doesn't list the board | Use another USB cable (it may be charge-only) or another USB port. On Linux, check that you are in the `dialout` group. On Windows, check that it appears in Device Manager under Ports (COM & LPT) |
 | The web flasher can't connect, or stops with an error such as "Failed to start stub flasher" | Set the baud rate to 115200; hold BOOT while clicking Connect; use another cable or port; close other programs using the board |
 | Nothing happens when I press BOOT | Make sure the console is started at 115200. Press RST/EN once and try again. Check that you flashed the right file for your board |
 | `passu`: No ESP32 found | Plug the board in with a data cable. Wait a few seconds after plugging in |
