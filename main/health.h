@@ -3,7 +3,7 @@
  *   - Repetition Count Test (RCT): catches a stuck source
  *   - Adaptive Proportion Test (APT): catches a heavily biased source
  *
- * Samples are bytes. Cut-offs assume a claimed min-entropy floor of
+ * Samples are bytes. Cut-offs use an assumed min-entropy floor of
  * H = 4 bits per byte and a false-alarm probability of about 2^-20:
  *   RCT cutoff = 1 + ceil(20 / H)                       = 6
  *   APT cutoff = critical binomial value, W = 512, p = 2^-H = 63

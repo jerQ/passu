@@ -44,7 +44,10 @@ You can use fewer groups if a site limits the length: take the **first** few
 groups and leave the rest. Don't pick the groups you like best, because that
 makes the result less random. The `passu` command does this for you: it
 gives 5 groups unless you ask for a different number with `-w` (up to 32),
-and can leave out the digits with `--no-digits`.
+and can leave out the digits with `--no-digits`. The firmware's batch size
+does not enforce a minimum strength for these options: one word without a
+digit has only about 12.9 bits. All strength estimates assume independent
+uniform choices from the randomness pipeline.
 
 | Groups | With digits | Words only |
 | --- | --- | --- |

@@ -4,8 +4,10 @@
  * The list is embedded verbatim in flash. At boot it is parsed once into an
  * index of offsets and strictly validated: every line must be
  * "<five dice digits><tab><word>", and the dice codes must appear in exact
- * order 11111, 11112, ... 66666. This proves that dice -> index -> word
- * matches the printed EFF list, and catches a truncated or edited file.
+ * order 11111, 11112, ... 66666. This validates the structure and the
+ * dice-to-index mapping. The pinned SHA-256 checked by the build and boot
+ * code verifies the exact EFF list. Parsing alone does not check that
+ * words are unique or match EFF when hash pinning is disabled.
  */
 #pragma once
 

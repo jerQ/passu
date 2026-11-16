@@ -8,9 +8,11 @@
  * bytes, so a subtle flaw in the raw output (one the health tests can't
  * see) is not passed straight through to the passphrase.
  *
- * Ratio 4:1. With the 4 bits/byte min-entropy floor claimed in health.h,
- * 128 raw bytes carry at least 512 bits, above the 256 + 64 bits that
- * NIST SP 800-90B asks of a vetted conditioner for full-entropy output.
+ * Ratio 4:1. If the source supplies at least 4 bits of conditional
+ * min-entropy per byte, 128 bytes provide at least 512 bits of input
+ * entropy. This is an assumption about the source, including dependencies
+ * between samples; passing the health tests does not establish it.
+ * Hashing cannot create missing entropy or guarantee full-entropy output.
  *
  * A failure (raw source or hash) latches: every later read fails.
  */

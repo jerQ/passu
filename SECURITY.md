@@ -106,14 +106,15 @@ over from one block to the next.
 
 **Why:**
 
-- **Hides subtle flaws.** A flaw in the raw output that the health tests
-  can't see, such as a slight bias or correlation, is not passed straight
-  into the passphrase. SHA-256 spreads whatever entropy the input has evenly
-  across the output.
-- **Wide margin.** At 4:1, even at the 4 bits per byte the health tests
-  assume, each 256-bit block comes from 512 bits of input. That is above the
-  256 + 64 bits NIST SP 800-90B asks of a vetted conditioner for
-  full-entropy output.
+- **Conditions the source output.** SHA-256 mixes the available input
+  entropy before word selection. It cannot create missing entropy or make
+  a predictable source trustworthy.
+- **Conditional input budget.** If each byte contributes at least 4 bits
+  of conditional min-entropy given preceding samples, 128 bytes provide
+  at least 512 bits per block. This includes sample dependencies; marginal
+  per-byte entropy alone is insufficient. The health tests do not establish
+  that bound, and it has not been validated experimentally. These checks
+  do not certify uniform or full-entropy output.
 - **An extra, independent input.** The cycle count is taken in the button
   interrupt, or when Enter arrives over serial, so it reflects the exact
   moment of the request (a human press, or the host's timing). It costs
@@ -146,12 +147,15 @@ would hide that.
 
 **What:** each group is one word from the 7776-word EFF list (five d6 rolls)
 plus one random digit, about 16.25 bits per group. The default is 8 groups
-(about 130 bits). The build only allows 5 to 16 groups, so the minimum is
-about 81 bits.
+(about 130 bits), assuming independent uniform choices. Firmware batches
+contain 5–16 groups. The host can keep 1–32 words and remove digits, so the
+firmware limit does not enforce a minimum strength for host output. The
+host default is 5 groups (about 81 bits); one word without its digit is only
+about 12.9 bits.
 
-**Why:** 130 bits is far beyond any practical guessing attack, even offline.
-The minimum stops a misconfigured build from producing passphrases that are
-easy to guess: before, 1 group (about 16 bits) was allowed.
+**Why:** longer independent random output provides a larger guessing space.
+Choose the host word count and digit options for the intended use; batch
+size alone does not describe the strength of the final passphrase.
 
 ## Wordlist integrity
 
@@ -176,9 +180,10 @@ entries with dice codes in exact order from 11111 to 66666, each followed by
 a tab or space and a word of 1–16 lowercase letters or hyphens. Anything
 after the last entry other than whitespace is rejected.
 
-**Why:** this proves that the mapping from dice to word matches the printed
-EFF list. A list with a missing, duplicated, reordered or malformed line
-would skew the mapping, so the device halts instead.
+**Why:** this validates structure and the dice-to-index mapping. The pinned
+hash verifies that the actual words match the EFF file. Parsing alone does
+not check word uniqueness. With hash pinning disabled, a list with ordered
+codes and repeated words can pass and reduce the output's strength.
 
 ## Failing closed
 

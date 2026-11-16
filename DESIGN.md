@@ -182,9 +182,12 @@ anyone can verify it.
 **Why 8 groups by default, and a minimum of 5.** Entropy is counted from
 how the generator works, not from the string: 8 × 16.25 ≈ 130 bits. That
 is out of reach of any offline guessing attack, even against a fast hash,
-with a wide margin. The build refuses fewer than 5 groups (≈ 81 bits): below
-that, a fast offline attack becomes thinkable, and nobody should get there
-by a typo in a config file.
+with a wide margin, assuming the randomness pipeline supplies independent
+uniform choices. The firmware configuration accepts 5–16 groups per batch.
+This is not a minimum strength enforced by the host: both host commands
+allow 1–32 words and can remove digits. Their default is 5 groups (≈ 81 bits);
+one word without its digit has only ≈ 12.9 bits. Strength depends on the
+output options, not just the firmware batch size.
 
 **Why no capitals or symbols.** They add little entropy per keystroke and
 make the passphrase harder to type and remember. Length is the cheapest
@@ -222,7 +225,7 @@ The raw bytes go through two continuous tests from NIST SP 800-90B §4.4:
 - **Adaptive proportion test (APT):** one value 63 or more times in a
   512-byte window means the source is badly biased.
 
-The cut-offs come from the standard's formulas, with a claimed minimum of
+The cut-offs come from the standard's formulas, with an assumed minimum of
 H = 4 bits of entropy per byte and a false-alarm rate of about 2^-20:
 RCT = 1 + ⌈20/H⌉ = 6, and APT is the critical binomial value for W = 512,
 p = 2^-H. A 1024-byte startup test runs before the device accepts any
@@ -251,13 +254,17 @@ block = SHA-256( 128 fresh raw bytes || cycle count at the trigger )
 **Why condition at all.** The health tests only catch gross failures. A
 subtle flaw, such as a slight bias, a correlation between bytes, or a weak
 period, would pass straight through to the passphrase. Hashing spreads
-whatever entropy the input has across the output. As long as the 128 input
-bytes hold at least 256 bits of entropy, the output is close to uniform.
+whatever entropy the input has across the output. It cannot create entropy
+or repair a predictable source. Output quality depends on the source and
+the conditioning assumptions; passing the health tests is not proof of
+uniform or full-entropy output.
 
-**Why 4:1.** At the 4 bits per byte assumed above, 128 bytes carry
-512 bits per 256-bit block. Before calling the output full-entropy,
-SP 800-90B asks a vetted conditioner for 64 bits more input entropy than
-output (here 320 bits), so there's a good margin. The default 8 groups use
+**Why 4:1.** If each byte contributes at least 4 bits of conditional
+min-entropy given the preceding samples, 128 bytes provide at least 512 bits
+of input entropy per 256-bit block. This assumption includes correlations
+between samples: marginal per-byte entropy cannot simply be added when
+bytes are dependent. The health tests do not establish this lower bound,
+and the project has not validated it experimentally. The default 8 groups use
 about 50 bytes of output, so 2 blocks, or 256 raw bytes, which takes
 microseconds.
 
@@ -305,7 +312,7 @@ uniform number below 7776 with rejection sampling would work just as well
 and use fewer bytes. Rolling five dice was chosen so the firmware does
 exactly what the EFF instructions describe. The dice code (e.g. `24315`)
 is an intermediate value you can compare with the printed list, and the
-wordlist parser proves that the code-to-word mapping matches it. The
+parser validates dice-code order, and the pinned hash verifies the words. The
 extra bytes cost nothing.
 
 **Why give up after 64 rejections.** With a healthy source, one rejection
@@ -333,9 +340,11 @@ after the last line but whitespace.
 **Why so strict.** A list with a dropped, duplicated or swapped line still
 "works", but silently changes which words come up, and a list where a few
 words appear many times could cut the entropy drastically while every
-passphrase still looks fine. Checking the dice codes in order proves that
-dice → index → word matches the printed list, without trusting the line
-count alone.
+passphrase still looks fine. Checking the dice codes validates structure
+and dice → index mapping. The pinned hash verifies that the words match
+the EFF file. Parsing does not check word uniqueness: with pinning disabled,
+a structurally valid list containing repeated words can pass and reduce
+passphrase strength.
 
 ## Failing closed
 

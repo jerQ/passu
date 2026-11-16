@@ -65,6 +65,11 @@ Any error exits with a non-zero status, and no passphrase is printed.
 `Ignoring a malformed passphrase line` is only a warning: a garbled line
 was skipped. If it keeps appearing, check the cable.
 
+The firmware produces batches of at least five groups, but `--words` can
+keep only one and `--no-digits` removes digit entropy. The batch minimum is
+not a minimum strength for host output. One word without a digit provides
+only about 12.9 bits, assuming uniform selection.
+
 ## Good habits
 
 - Keep the passphrase out of terminal scrollback: use `--copy`, or clear
