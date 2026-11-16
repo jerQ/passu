@@ -1,3 +1,15 @@
+/**
+ * @file entropy_radio.c
+ * @brief Start the Wi-Fi entropy dependency and expose esp_fill_random().
+ *
+ * This is the platform boundary below the portable health/conditioning code.
+ * Wi-Fi is configured in station mode without a connect or scan call, with
+ * settings in RAM and power saving disabled. The event-loop task maintains a
+ * running flag that the generator's reads inspect atomically.
+ *
+ * Resources persist for the firmware lifetime. There is no stop, reconnect,
+ * or retry API; startup failure is handled by the application.
+ */
 #include "entropy_radio.h"
 
 #include <stdatomic.h>
@@ -15,9 +27,13 @@ static const char *TAG = "entropy";
 #define STA_STARTED_BIT BIT0
 #define STA_STOPPED_BIT BIT1
 
+/* The event group lets boot wait for startup without polling. The atomic flag
+ * is the cheap runtime check shared with the Wi-Fi event-loop task. */
 static EventGroupHandle_t s_events;
 static atomic_bool s_radio_running = false;
 
+/* Runs in event-loop task context, not in a GPIO ISR. Event delivery updates
+ * the software view of station state; it is not a synchronous hardware probe. */
 static void wifi_event_handler(void *arg, esp_event_base_t base,
                                int32_t id, void *data)
 {
@@ -36,6 +52,8 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
     }
 }
 
+/* Boot-only initialization. Errors propagate to app_main; partial resources
+ * intentionally have no teardown path because initialization is not retried. */
 esp_err_t entropy_radio_start(void)
 {
     s_events = xEventGroupCreate();
@@ -87,6 +105,9 @@ esp_err_t entropy_radio_start(void)
     return ESP_OK;
 }
 
+/* rng_t callback. A stop observed on either side of the fill invalidates the
+ * whole read. Do not erase here: the checked RNG above this provider handles
+ * output cleanup, including the case where bytes were already written. */
 static bool radio_read(void *ctx, uint8_t *out, size_t len)
 {
     (void)ctx;
@@ -98,6 +119,7 @@ static bool radio_read(void *ctx, uint8_t *out, size_t len)
     return atomic_load(&s_radio_running);
 }
 
+/* No per-instance state is needed; all handles reference the same radio. */
 rng_t entropy_radio_rng(void)
 {
     return (rng_t){ .read = radio_read, .ctx = NULL };

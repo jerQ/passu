@@ -5,6 +5,9 @@ generator, is put together and why. It is written for readers who are
 comfortable with C, embedded systems and basic cryptography, and who want
 to judge whether the design holds up, not just how to use it.
 
+[C_SOURCE_GUIDE.md](C_SOURCE_GUIDE.md) maps every C source/header and explains
+API contracts, memory ownership, and the test fixtures.
+
 [SECURITY.md](SECURITY.md) lists each security measure and the known gaps.
 This document covers the decisions behind the whole design: what was chosen,
 what was rejected, and the trade-offs. The two overlap in places, which is

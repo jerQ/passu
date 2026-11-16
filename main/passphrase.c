@@ -1,9 +1,20 @@
+/**
+ * @file passphrase.c
+ * @brief Assemble independent word/digit choices with bounded output writes.
+ *
+ * For each group: draw five d6 rolls, map them to one wordlist index, draw a
+ * digit, and append word+digit plus a separator when needed. Randomness comes
+ * entirely from the supplied rng_t; this module performs no hardware access.
+ * Error cleanup removes partial output instead of exposing a shorter phrase.
+ */
 #include "passphrase.h"
 
 #include <string.h>
 
 #include "dice.h"
 
+/* Volatile stores preserve the explicit writes even when the compiler sees
+ * no later reads. This utility is shared by the portable RNG modules. */
 void secure_zero(void *p, size_t len)
 {
     volatile uint8_t *v = p;
@@ -12,6 +23,8 @@ void secure_zero(void *p, size_t len)
     }
 }
 
+/* Build directly into the caller's buffer; avoid another full phrase copy.
+ * Every path after sampling starts goes through out: for common cleanup. */
 pp_err_t passphrase_generate(const rng_t *rng, const wordlist_t *wl,
                              unsigned groups, char *out, size_t out_size)
 {
@@ -49,6 +62,9 @@ pp_err_t passphrase_generate(const rng_t *rng, const wordlist_t *wl,
             goto out;
         }
 
+        /* The wordlist returns a bounded slice, not a NUL-terminated string.
+         * Check capacity for this word, its digit, any separator, AND the final
+         * NUL before copying. Previously built groups are erased on failure. */
         unsigned wlen;
         const char *word = wordlist_word(wl, index, &wlen);
         size_t need = wlen + 1 + (g + 1 < groups ? 1 : 0); /* word+digit[+'-'] */
@@ -66,6 +82,8 @@ pp_err_t passphrase_generate(const rng_t *rng, const wordlist_t *wl,
     out[pos] = '\0';
 
 out:
+    /* Wipe selection material even on success; the caller later wipes the
+     * resulting phrase after delivering it to the chosen output. */
     secure_zero(dice, sizeof(dice));
     secure_zero(&digit, sizeof(digit));
     secure_zero(&index, sizeof(index));
@@ -75,6 +93,7 @@ out:
     return err;
 }
 
+/* Diagnostics contain no phrase material and require no caller-owned buffer. */
 const char *passphrase_strerror(pp_err_t err)
 {
     switch (err) {
