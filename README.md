@@ -22,9 +22,8 @@ Internally passu uses a wordlist from the [EFF wordlist](https://www.eff.org/dic
 ESP32 uses the chip's own hardware random number generator to "roll a dice", this information
 is used to pick words from the list, extra single digit is added to each word to add more entropy.
 
-This page shows how to put passu on a board and use it, no programming
-needed. To build it yourself or change its settings, see
-[BUILDING.md](BUILDING.md).
+This page shows how to install passu on a board and how use it. If you want to build it yourself 
+or change its settings, see [BUILDING.md](BUILDING.md).
 
 ## Contents
 
