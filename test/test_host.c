@@ -383,9 +383,23 @@ static void test_passphrase(void)
     CHECK(passphrase_generate(&URANDOM, &wl, 8, small, sizeof small) == PP_ERR_BUFFER);
     for (size_t i = 0; i < sizeof small; i++) CHECK(small[i] == 0);
 
-    /* bad args */
-    CHECK(passphrase_generate(&URANDOM, &wl, 0, out, sizeof out) == PP_ERR_ARGS);
-    CHECK(passphrase_generate(&URANDOM, &wl, 17, out, sizeof out) == PP_ERR_ARGS);
+    /* Invalid arguments must also clear a supplied output buffer. */
+    const unsigned bad_groups[] = {0, PASSPHRASE_MAX_GROUPS + 1};
+    for (unsigned i = 0; i < sizeof(bad_groups) / sizeof(bad_groups[0]); i++) {
+        memset(out, 'x', sizeof out);
+        CHECK(passphrase_generate(&URANDOM, &wl, bad_groups[i], out, sizeof out) == PP_ERR_ARGS);
+        CHECK(all_zero((const uint8_t *)out, sizeof out));
+    }
+    memset(out, 'x', sizeof out);
+    CHECK(passphrase_generate(NULL, &wl, 8, out, sizeof out) == PP_ERR_ARGS);
+    CHECK(all_zero((const uint8_t *)out, sizeof out));
+    memset(out, 'x', sizeof out);
+    CHECK(passphrase_generate(&URANDOM, NULL, 8, out, sizeof out) == PP_ERR_ARGS);
+    CHECK(all_zero((const uint8_t *)out, sizeof out));
+    CHECK(passphrase_generate(&URANDOM, &wl, 8, NULL, sizeof out) == PP_ERR_ARGS);
+    out[0] = 'x';
+    CHECK(passphrase_generate(&URANDOM, &wl, 8, out, 0) == PP_ERR_BUFFER);
+    CHECK(out[0] == 'x'); /* No writable bytes were supplied. */
 
     /* entropy failure mid-way: nothing partial left */
     uint8_t some[20]; memset(some, 3, sizeof some);

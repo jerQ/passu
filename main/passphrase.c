@@ -16,6 +16,9 @@ pp_err_t passphrase_generate(const rng_t *rng, const wordlist_t *wl,
                              unsigned groups, char *out, size_t out_size)
 {
     if (!rng || !wl || !out || groups == 0 || groups > PASSPHRASE_MAX_GROUPS) {
+        if (out && out_size > 0) {
+            secure_zero(out, out_size);
+        }
         return PP_ERR_ARGS;
     }
     if (out_size == 0) {
