@@ -379,8 +379,12 @@ func session(port io.ReadWriter, o options, stdout io.Writer) (string, error) {
 		if o.copy {
 			clip = phrase
 		} else {
-			fmt.Fprintln(out, phrase)
-			out.Flush()
+			if _, err := fmt.Fprintln(out, phrase); err != nil {
+				return "", fatalf("Cannot write passphrase to stdout: %v", err)
+			}
+			if err := out.Flush(); err != nil {
+				return "", fatalf("Cannot write passphrase to stdout: %v", err)
+			}
 		}
 	}
 	return clip, nil
