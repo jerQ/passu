@@ -231,6 +231,8 @@ No passphrase is better than a bad one.
 - [BUILDING.md](BUILDING.md): build passu yourself, change the settings, lock
   the board against reprogramming
 - [DESIGN.md](DESIGN.md): how it works and why
+- [C_SOURCE_GUIDE.md](C_SOURCE_GUIDE.md): C file map, reading order, API contracts,
+  and memory ownership
 - [SECURITY.md](SECURITY.md): every security measure and the known gaps
 
 ## License

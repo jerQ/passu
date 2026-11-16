@@ -1,4 +1,7 @@
-/*
+/**
+ * @file main.c
+ * @brief Boot sequence, trigger producers, and the single generation consumer.
+ *
  * passu - ESP32 diceware passphrase generator, proof of concept.
  *
  * Entropy: ESP32 hardware RNG with the Wi-Fi radio running (never connected),
@@ -7,6 +10,11 @@
  * Output:  passphrases printed to the USB serial console.
  * Trigger: press the button (default GPIO0, the BOOT button on most dev
  *          boards) or press Enter in the serial monitor (tools/passu.py).
+ *
+ * Boot initializes the wordlist and RNG chain before enabling user input.
+ * After boot, only generator_task accesses mutable RNG wrapper state. The ISR
+ * and optional serial task copy trigger records into a FreeRTOS queue, so
+ * neither producer performs hashing, word lookup, or passphrase output.
  */
 #include <stdio.h>
 #include <string.h>
@@ -31,6 +39,8 @@
 
 static const char *TAG = "passu";
 
+/* Linker-generated bounds for EMBED_TXTFILES, not ordinary C string globals.
+ * The embedded file is read-only; s_wordlist borrows slices from this region. */
 extern const char wordlist_start[] asm("_binary_eff_large_wordlist_txt_start");
 extern const char wordlist_end[]   asm("_binary_eff_large_wordlist_txt_end");
 
@@ -38,12 +48,16 @@ extern const char wordlist_end[]   asm("_binary_eff_large_wordlist_txt_end");
 
 typedef enum { TRIGGER_BUTTON, TRIGGER_SERIAL } trigger_type_t;
 
+/* Queue payload is copied by value. Cycle timing is supplemental hash input;
+ * the design does not count it toward the passphrase's claimed entropy. */
 typedef struct {
     trigger_type_t type;
     uint32_t       cycles;   /* CPU cycle count at the press, mixed into the hash */
     char request_id[SERIAL_REQUEST_ID_LEN + 1]; /* empty for manual triggers */
 } trigger_t;
 
+/* Static lifetime keeps borrowed RNG contexts and the large index valid after
+ * app_main returns. Only the trigger queue crosses producer/consumer contexts. */
 static wordlist_t    s_wordlist;      /* ~39 KB index, keep off the stack */
 static checked_rng_t s_checked;
 static conditioned_rng_t s_cond;
@@ -51,6 +65,9 @@ static QueueHandle_t s_triggers;
 
 /* ---------- wordlist ---------- */
 
+/* Hash the exact embedded file bytes, optionally verify its pinned identity,
+ * then validate and index its records. PSA initialization here also prepares
+ * the hash adapter used later by the conditioner. Any failure halts boot. */
 static void wordlist_load_or_halt(void)
 {
     size_t len = (size_t)(wordlist_end - wordlist_start);
@@ -103,6 +120,8 @@ halt:
 
 /* ---------- triggers ---------- */
 
+/* ISR-safe producer: capture timing and enqueue without waiting. A full queue
+ * drops this trigger. Debouncing belongs to the consumer, keeping the ISR short. */
 static void IRAM_ATTR button_isr(void *arg)
 {
     (void)arg;
@@ -114,6 +133,7 @@ static void IRAM_ATTR button_isr(void *arg)
     }
 }
 
+/* Install the active-low GPIO producer only after queue/task setup succeeds. */
 static void button_init(void)
 {
     gpio_config_t io = {
@@ -129,6 +149,13 @@ static void button_init(void)
 }
 
 #if CONFIG_DW_SERIAL_TRIGGER
+/* Task-context producer. serial_parser_feed() turns bytes into events: an
+ * empty line (CR, LF, or CRLF counted once) is a manual Enter, and a
+ * "PASSU/1 <id>" line is a machine request whose id travels in the trigger.
+ * Malformed and overlong lines are discarded without generating anything
+ * (see PROTOCOL.md). EOF means no console input is available; sleep briefly
+ * to avoid spinning. Queue sends do not wait: a full queue drops a manual
+ * Enter silently and answers a machine request with a tagged error. */
 static void serial_task(void *arg)
 {
     (void)arg;
@@ -173,6 +200,8 @@ static void report_previous_crash(void)
 
 /* ---------- generation ---------- */
 
+/* Adapt PSA's status/length API to the conditioner's synchronous bool callback.
+ * Require the complete digest rather than treating a short output as success. */
 static bool sha256_psa(const uint8_t *data, size_t len,
                        uint8_t out[CONDITION_OUT_BYTES])
 {
@@ -182,6 +211,10 @@ static bool sha256_psa(const uint8_t *data, size_t len,
            out_len == CONDITION_OUT_BYTES;
 }
 
+/* Sole owner of mutable health/conditioning state after startup. Consume one
+ * request at a time, debounce button events, generate, report, and wipe. The
+ * successful phrase lives on this task's stack only until output completes;
+ * console/driver/host copies are outside secure_zero()'s reach. */
 static void generator_task(void *arg)
 {
     (void)arg;
@@ -240,6 +273,8 @@ static void generator_task(void *arg)
     }
 }
 
+/* Report startup resource failure and sleep forever without declaring ready.
+ * Blocking yields the CPU while keeping the application in a failed state. */
 static void device_halt(const char *reason)
 {
     printf("\nDEVICE-ERROR: %s, halting\n", reason);
@@ -249,6 +284,12 @@ static void device_halt(const char *reason)
     }
 }
 
+/**
+ * ESP-IDF entry point. Order matters: validate data, start/check entropy, build
+ * the conditioner, allocate queue/tasks, then install the button producer.
+ * Successful return leaves the worker tasks running; startup failures halt
+ * or follow ESP_ERROR_CHECK's configured panic handling.
+ */
 void app_main(void)
 {
     report_previous_crash();

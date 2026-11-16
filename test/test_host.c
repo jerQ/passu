@@ -1,9 +1,19 @@
-/*
+/**
+ * @file test_host.c
+ * @brief Host tests for portable parsing, sampling, health, and conditioning.
+ *
  * Host-side tests for the platform-independent modules.
  * Build and run:  make -C test
  *
  * Uses a synthetic wordlist in EFF format, or the real list if
- * ../main/eff_large_wordlist.txt exists.
+ * ../main/eff_large_wordlist.txt exists. Run from test/ (make -C test does
+ * this) so that relative path resolves. OpenSSL supplies the host hash adapter;
+ * /dev/urandom is test input, never a replacement for firmware entropy.
+ *
+ * CHECK records failures without immediately exiting, so tests assume their
+ * fixture setup succeeds. Scripted providers exercise deterministic boundaries
+ * and failure cleanup; statistical checks can occasionally fail by chance and
+ * do not validate the ESP32 hardware RNG. See test/Makefile for sanitizer flags.
  */
 #include <math.h>
 #include <stdio.h>
@@ -26,6 +36,8 @@ static int failures;
 
 /* ---------- fake sources ---------- */
 
+/* Borrow a fixed byte sequence. Exhaustion can leave a partial destination,
+ * intentionally exercising the wrappers' responsibility to clear failed reads. */
 typedef struct { const uint8_t *bytes; size_t n, pos; } seq_t;
 static bool seq_read(void *ctx, uint8_t *out, size_t len)
 {
@@ -38,6 +50,7 @@ static bool seq_read(void *ctx, uint8_t *out, size_t len)
 }
 
 static FILE *urandom;
+/* Shared host-only provider for distribution checks and varied phrase samples. */
 static bool urandom_read(void *ctx, uint8_t *out, size_t len)
 {
     (void)ctx;
@@ -45,17 +58,20 @@ static bool urandom_read(void *ctx, uint8_t *out, size_t len)
 }
 static const rng_t URANDOM = { urandom_read, NULL };
 
+/* Deterministic stuck source; ctx borrows the single byte to repeat. */
 static bool const_read(void *ctx, uint8_t *out, size_t len)
 {
     memset(out, *(uint8_t *)ctx, len);
     return true;
 }
 
+/* Match the firmware callback contract using OpenSSL instead of PSA. */
 static bool sha256_openssl(const uint8_t *data, size_t len, uint8_t out[32])
 {
     return SHA256(data, len, out) != NULL;
 }
 
+/* Force hash failure even when the upstream source still has data. */
 static bool sha256_broken(const uint8_t *data, size_t len, uint8_t out[32])
 {
     (void)data; (void)len; (void)out;
@@ -64,6 +80,9 @@ static bool sha256_broken(const uint8_t *data, size_t len, uint8_t out[32])
 
 /* ---------- synthetic wordlist ---------- */
 
+/* Allocate a complete structurally valid list with unique synthetic words.
+ * The caller owns the result; keep it alive while wl borrows its word slices.
+ * eol controls LF/CRLF fixtures. *len excludes snprintf's final NUL. */
 static char *make_list(size_t *len, const char *eol)
 {
     size_t cap = WORDLIST_SIZE * 24, p = 0;
@@ -84,6 +103,8 @@ static char *make_list(size_t *len, const char *eol)
     return buf;
 }
 
+/* Optional real-list fixture: return owned bytes (not NUL-terminated), or NULL
+ * when unavailable. This small test helper assumes readable local fixtures. */
 static char *load_file(const char *path, size_t *len)
 {
     FILE *f = fopen(path, "rb");
@@ -99,6 +120,8 @@ static wordlist_t wl;
 
 /* ---------- tests ---------- */
 
+/* Check index endpoints, representative dice, malformed records, and line
+ * endings. Finish by leaving wl backed by live text for subsequent tests. */
 static void test_wordlist(void)
 {
     printf("wordlist parsing/validation\n");
@@ -163,6 +186,8 @@ static void test_wordlist(void)
     }
 }
 
+/* Script exact accept/reject boundaries, then sample distributions. The final
+ * exhaustive modulo example explains the bias rejection sampling removes. */
 static void test_dice(void)
 {
     printf("dice rejection sampling\n");
@@ -212,6 +237,8 @@ static void test_dice(void)
     CHECK(naive[0] == 43 && naive[5] == 42);   /* why rejection is needed */
 }
 
+/* Exercise stuck/biased sources, sticky errors, and cleanup. Random input
+ * checks gross false alarms but cannot establish the firmware's entropy rate. */
 static void test_health(void)
 {
     printf("health tests\n");
@@ -257,12 +284,15 @@ static void test_health(void)
     CHECK(c.health.failed);
 }
 
+/* Inspect complete wipe ranges rather than relying only on a leading NUL. */
 static bool all_zero(const uint8_t *p, size_t n)
 {
     for (size_t i = 0; i < n; i++) if (p[i]) return false;
     return true;
 }
 
+/* Compare deterministic digest blocks, partial reads, supplemental input,
+ * wipes, and failure propagation before sampling the combined pipeline. */
 static void test_condition(void)
 {
     printf("conditioning\n");
@@ -345,6 +375,8 @@ static void test_condition(void)
     CHECK(chi2 < 20.5);
 }
 
+/* Test-only linear membership check; production lookup uses a direct index.
+ * Both arguments describe a slice, so an internal word hyphen stays intact. */
 static bool word_in_list(const char *s, size_t n)
 {
     for (unsigned i = 0; i < WORDLIST_SIZE; i++) {
@@ -354,6 +386,8 @@ static bool word_in_list(const char *s, size_t n)
     return false;
 }
 
+/* Verify generated structure/membership and cleanup after buffer, argument,
+ * and mid-generation source errors. These samples are disposable test output. */
 static void test_passphrase(void)
 {
     printf("passphrase generation\n");
@@ -415,6 +449,8 @@ static void test_passphrase(void)
     CHECK(strchr(out, '\0') - out >= 2);
 }
 
+/* Each case counts Enter events in a fresh state: CRLF is one, while
+ * standalone CR, LF, and separated terminators each count. */
 static void test_serial_enter(void)
 {
     const struct { const char *input; unsigned count; } cases[] = {
@@ -431,6 +467,8 @@ static void test_serial_enter(void)
     }
 }
 
+/* Test order is intentional: test_wordlist initializes the shared wl fixture
+ * consumed by test_passphrase. Exit nonzero if any CHECK recorded a failure. */
 int main(void)
 {
     urandom = fopen("/dev/urandom", "rb");

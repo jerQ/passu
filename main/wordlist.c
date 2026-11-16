@@ -1,7 +1,18 @@
+/**
+ * @file wordlist.c
+ * @brief Parse EFF-format records into an allocation-free lookup index.
+ *
+ * The text remains in its original storage (flash on the ESP32). The index
+ * stores one offset and length per word instead of copying word characters.
+ * Dice-code order is verified during parsing; exact file identity is checked
+ * separately by main.c and the build's pinned SHA-256 configuration.
+ */
 #include "wordlist.h"
 
 #include <string.h>
 
+/* Render an index as five base-6 digits, shifted from 0..5 to dice faces
+ * '1'..'6'. The fixed-width result is compared with memcmp, not as a C string. */
 static void dice_code_for_index(unsigned index, char code[WORDLIST_DICE])
 {
     for (int i = WORDLIST_DICE - 1; i >= 0; i--) {
@@ -16,6 +27,9 @@ static bool is_word_char(char c)
     return (c >= 'a' && c <= 'z') || c == '-';
 }
 
+/* Walk once through the bounded text, recording slices only after each record
+ * validates. An early return leaves a partial index, so callers must require
+ * WL_OK before publishing this object to the generator. */
 wordlist_err_t wordlist_init(wordlist_t *wl, const char *data, size_t len,
                              unsigned *bad_line)
 {
@@ -92,6 +106,7 @@ wordlist_err_t wordlist_init(wordlist_t *wl, const char *data, size_t len,
     return WL_OK;
 }
 
+/* Static messages keep error reporting independent of allocation and parsing. */
 const char *wordlist_strerror(wordlist_err_t err)
 {
     switch (err) {
@@ -105,6 +120,8 @@ const char *wordlist_strerror(wordlist_err_t err)
     return "unknown error";
 }
 
+/* Horner's rule for base 6: subtract one from each die, then idx = idx*6+d.
+ * Five digits need fewer than 16 bits. Commit the output only after validation. */
 bool wordlist_index_from_dice(const uint8_t dice[WORDLIST_DICE], uint16_t *index)
 {
     unsigned idx = 0;
@@ -118,6 +135,9 @@ bool wordlist_index_from_dice(const uint8_t dice[WORDLIST_DICE], uint16_t *index
     return true;
 }
 
+/* Direct index lookup into borrowed text, without a word search. Only the index
+ * is checked; object validity and backing-buffer lifetime are the caller's
+ * responsibility. */
 const char *wordlist_word(const wordlist_t *wl, uint16_t index, unsigned *len)
 {
     if (index >= WORDLIST_SIZE) {

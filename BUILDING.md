@@ -25,6 +25,9 @@ random number generator:
 
 [DESIGN.md](DESIGN.md): How it is built and why
 
+[C_SOURCE_GUIDE.md](C_SOURCE_GUIDE.md): C file map, reading order, API contracts,
+and memory ownership
+
 [SECURITY.md](SECURITY.md): Every security measure, the optional device lockdown and the known gaps
 
 
