@@ -213,13 +213,10 @@ type lineReader struct {
 }
 
 // readPassphrase returns the next passphrase from the serial stream, waiting
-// at most timeout (0: no limit). With bareOK, an untagged line in the
-// passphrase format (a button press) counts too.
-func (r *lineReader) readPassphrase(timeout time.Duration, bareOK bool, requestID ...string) (string, error) {
-	id := ""
-	if len(requestID) > 0 {
-		id = requestID[0]
-	}
+// at most timeout (0: no limit). A non-empty id accepts only the PASSU/1
+// response to that request; otherwise (button mode, id ""), with bareOK an
+// untagged line in the passphrase format (a button press) counts too.
+func (r *lineReader) readPassphrase(timeout time.Duration, bareOK bool, id string) (string, error) {
 	var deadline time.Time
 	if timeout > 0 {
 		deadline = time.Now().Add(timeout)
@@ -239,7 +236,7 @@ func (r *lineReader) readPassphrase(timeout time.Duration, bareOK bool, requestI
 					return phrase, frameErr
 				}
 				if m := deviceErrorRe.FindStringSubmatch(line); m != nil {
-					return "", fatalf("Device reported: %s", m[1])
+					return "", deviceError(m[1])
 				}
 				continue
 			}
@@ -256,8 +253,7 @@ func (r *lineReader) readPassphrase(timeout time.Duration, bareOK bool, requestI
 				return "", fatalf("Device reported an error: %s", m[1])
 			}
 			if m := deviceErrorRe.FindStringSubmatch(line); m != nil {
-				return "", fatalf("Device reported: %s. Try again; if it "+
-					"keeps happening, don't use the device", m[1])
+				return "", deviceError(m[1])
 			}
 		}
 		if r.readErr != nil {
@@ -273,6 +269,12 @@ func (r *lineReader) readPassphrase(timeout time.Duration, bareOK bool, requestI
 	return "", fatalf("No answer from the device within %d s (is "+
 		"'Generate on Enter in serial console' enabled in the firmware? "+
 		"Use matching firmware and host versions, or use --button)", int(requestTimeout/time.Second))
+}
+
+// deviceError reports a DEVICE-ERROR line (a startup or hardware failure).
+func deviceError(reason string) error {
+	return fatalf("Device reported: %s. Try again; if it keeps happening, "+
+		"don't use the device", reason)
 }
 
 // parseResponse ignores unrelated replies and rejects corrupt matching frames.

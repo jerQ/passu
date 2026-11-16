@@ -55,7 +55,7 @@ func (c *chunkReader) Read(p []byte) (int, error) {
 func read(t *testing.T, bareOK bool, chunks ...string) (string, error) {
 	t.Helper()
 	r := &lineReader{port: &chunkReader{chunks}}
-	return r.readPassphrase(50*time.Millisecond, bareOK)
+	return r.readPassphrase(50*time.Millisecond, bareOK, "")
 }
 
 func TestReadPassphrase(t *testing.T) {
@@ -98,7 +98,7 @@ func (failReader) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
 
 func TestLostConnection(t *testing.T) {
 	r := &lineReader{port: failReader{}}
-	if _, err := r.readPassphrase(0, true); err == nil || !strings.Contains(err.Error(), "Lost connection") {
+	if _, err := r.readPassphrase(0, true, ""); err == nil || !strings.Contains(err.Error(), "Lost connection") {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -285,7 +285,7 @@ func TestBufferedRepliesBeforeReadError(t *testing.T) {
 	port := &finalReplies{}
 	r := &lineReader{port: port}
 	for _, want := range []string{"apple3", "orbit0"} {
-		got, err := r.readPassphrase(time.Second, false)
+		got, err := r.readPassphrase(time.Second, false, "")
 		if err != nil || got != want {
 			t.Fatalf("got %q, %v; want %q", got, err, want)
 		}
@@ -293,7 +293,21 @@ func TestBufferedRepliesBeforeReadError(t *testing.T) {
 	if port.calls != 1 {
 		t.Fatalf("read %d times, want 1", port.calls)
 	}
-	if _, err := r.readPassphrase(time.Second, false); err == nil {
+	if _, err := r.readPassphrase(time.Second, false, ""); err == nil {
 		t.Fatal("expected connection error after buffered replies")
+	}
+}
+
+// DEVICE-ERROR lines carry the same advice with and without a request id.
+func TestDeviceErrorAdvice(t *testing.T) {
+	const want = "Device reported: entropy source failed, halting. Try again; " +
+		"if it keeps happening, don't use the device"
+	for _, id := range []string{"", "00112233445566778899aabbccddeeff"} {
+		r := &lineReader{port: &chunkReader{[]string{"\nDEVICE-ERROR: entropy source failed, halting\n"}}}
+		_, err := r.readPassphrase(time.Second, false, id)
+		var f fatal
+		if !errors.As(err, &f) || err.Error() != want {
+			t.Fatalf("id %q: got %v, want %q", id, err, want)
+		}
 	}
 }
