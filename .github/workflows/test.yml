@@ -1,0 +1,96 @@
+# Run the host tests and build the firmware on every pull request and every
+# push to main. No board needed: C and Python tests run on the host, and the
+# firmware is only compiled (esp32 and esp32c3).
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# A newer push to the same PR or branch cancels the run in progress.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: Go host
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: host/go.mod
+          cache-dependency-path: host/go.sum
+
+      - name: gofmt
+        working-directory: host
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "Not gofmt-formatted:"; echo "$unformatted"; exit 1
+          fi
+
+      - name: go vet
+        working-directory: host
+        run: go vet ./...
+
+      - name: go test
+        working-directory: host
+        run: go test ./...
+
+  c-python:
+    # make -C test: C host and protocol tests under AddressSanitizer and
+    # UndefinedBehaviorSanitizer with -Werror, then the Python tests.
+    name: C and Python tests (${{ matrix.cc }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install OpenSSL headers
+        run: sudo apt-get update -q && sudo apt-get install -y -q libssl-dev
+
+      - name: make -C test
+        env:
+          CC: ${{ matrix.cc }}
+          ASAN_OPTIONS: detect_leaks=0
+        run: make -C test CC="$CC"
+
+  firmware:
+    name: Firmware build (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    # Same ESP-IDF version as the documented local setup (BUILDING.md)
+    container: espressif/idf:v6.1
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [esp32, esp32c3]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        shell: bash
+        run: |
+          # the checkout is owned by another user inside the container
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          . "$IDF_PATH/export.sh"
+          idf.py set-target ${{ matrix.target }}
+          idf.py build 2>&1 | tee build.log
+          exit "${PIPESTATUS[0]}"
+
+      # The firmware builds without -Werror; fail on warnings in our own code.
+      - name: No compiler warnings in main/
+        shell: bash
+        run: |
+          if grep -E '(^|/)main/[^:]+:[0-9]+:[0-9]+: warning:' build.log; then
+            exit 1
+          fi
