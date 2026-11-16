@@ -149,9 +149,13 @@ static void button_init(void)
 }
 
 #if CONFIG_DW_SERIAL_TRIGGER
-/* Task-context producer. CR and LF each request generation in this revision;
- * other characters are ignored. EOF is treated as no available console input,
- * with a short delay to avoid spinning. Queue sends do not wait for capacity. */
+/* Task-context producer. serial_parser_feed() turns bytes into events: an
+ * empty line (CR, LF, or CRLF counted once) is a manual Enter, and a
+ * "PASSU/1 <id>" line is a machine request whose id travels in the trigger.
+ * Malformed and overlong lines are discarded without generating anything
+ * (see PROTOCOL.md). EOF means no console input is available; sleep briefly
+ * to avoid spinning. Queue sends do not wait: a full queue drops a manual
+ * Enter silently and answers a machine request with a tagged error. */
 static void serial_task(void *arg)
 {
     (void)arg;

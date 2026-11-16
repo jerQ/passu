@@ -27,8 +27,12 @@ constructing each layer without an ESP32.
 | [main/condition.c](main/condition.c) | Fresh-input refills, partial reads from digest blocks, immediate erasure of consumed bytes, and sticky failures. |
 | [main/entropy_radio.h](main/entropy_radio.h) | Boot-only radio lifecycle and the hardware-source adapter contract. |
 | [main/entropy_radio.c](main/entropy_radio.c) | ESP-IDF initialization, station events, atomic running flag, and checks around hardware RNG reads. |
+| [main/serial_enter.h](main/serial_enter.h) | Header-only Enter detector: CR, LF, and CRLF (once). Feed only real bytes, never EOF. Relies on `sdkconfig.defaults` disabling ESP-IDF's CR-to-LF stdin conversion. |
+| [main/serial_protocol.h](main/serial_protocol.h) | `PASSU/1` request parser state, event types, and request-identifier size. The wire format is in [PROTOCOL.md](PROTOCOL.md). |
+| [main/serial_protocol.c](main/serial_protocol.c) | Bounded line buffer: empty lines are manual Enter, valid `PASSU/1 <id>` lines are requests, malformed or overlong lines are discarded through their terminator. Also the CRC-32 that hosts check. |
 | [main/main.c](main/main.c) | Boot ordering, wordlist hash verification, queue producers, task ownership, serial output, and resource-failure handling. |
-| [test/test_host.c](test/test_host.c) | Scripted/stuck/random sources, host SHA-256 adapter, parser fixtures, boundary checks, failure cleanup, and statistical checks. |
+| [test/test_host.c](test/test_host.c) | Scripted/stuck/random sources, host SHA-256 adapter, parser fixtures, boundary checks, failure cleanup, statistical checks, and Enter detection. |
+| [test/test_protocol.c](test/test_protocol.c) | Request parser cases (valid, short, non-hex, overlong) and the CRC-32 vectors shared with the Go and Python hosts. |
 
 ## How the pieces fit
 
@@ -53,10 +57,13 @@ The underlying objects must remain alive, and mutable wrappers must not
 be read concurrently without external serialization.
 
 `app_main()` builds this chain once. The button ISR and serial task submit
-small trigger records to a queue. The generator task consumes them and
-owns the mutable RNG state after startup. The GPIO interrupt does not
-perform hashing or build a passphrase. The queue copies records by value;
-full nonblocking sends can drop triggers.
+small trigger records to a queue. A serial machine request carries its
+`PASSU/1` identifier in the record so the reply can echo it, with the
+phrase length and CRC-32; button and manual Enter records leave it empty.
+The generator task consumes them and owns the mutable RNG state after
+startup. The GPIO interrupt does not perform hashing or build a
+passphrase. The queue copies records by value; full nonblocking sends can
+drop triggers.
 
 ## Memory ownership and failure handling
 
@@ -89,7 +96,12 @@ identity with the expected EFF file.
 
 ## Working with the tests
 
-Run `make -C test`. The portable test binary uses OpenSSL for SHA-256 and
+Run `make -C test`. It builds and runs two C binaries, `test_host` and
+`test_protocol`, under AddressSanitizer and UndefinedBehaviorSanitizer,
+then runs the Python tests: the host reader and protocol checks
+(`test_passu.py`, `test_protocol.py`) and `test_startup.py`, which
+compiles the real `app_main()` startup flow against stubs to exercise
+allocation failures. `test_host` uses OpenSSL for SHA-256 and
 `/dev/urandom` for varied test input. It does not start Wi-Fi, run ESP-IDF
 tasks, or measure the device's hardware entropy. If the real wordlist is
 available, it is used after the malformed/synthetic parser fixtures.
