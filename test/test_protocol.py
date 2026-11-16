@@ -1,30 +1,6 @@
-import importlib.util
-from pathlib import Path
-import sys
-import types
 import unittest
-from unittest.mock import patch
 
-# Reader tests do not require pyserial or a connected device.
-spec = importlib.util.spec_from_file_location("passu", Path(__file__).parents[1] / "tools/passu.py")
-passu = importlib.util.module_from_spec(spec)
-serial = types.ModuleType("serial")
-tools = types.ModuleType("serial.tools")
-tools.list_ports = types.SimpleNamespace()
-with patch.dict(sys.modules, {"serial": serial, "serial.tools": tools}):
-    spec.loader.exec_module(passu)
-
-
-class Port:
-    def __init__(self, *chunks):
-        self.chunks = list(chunks)
-        self.reads = 0
-
-    def read(self, size):
-        self.reads += 1
-        if not self.chunks:
-            raise AssertionError("reader discarded buffered data")
-        return self.chunks.pop(0)
+from passu_testlib import Port, passu
 
 
 class ProtocolTests(unittest.TestCase):
@@ -58,6 +34,17 @@ class ProtocolTests(unittest.TestCase):
         data = ("PASSPHRASE: apple3\n" + self.frame(request_id="f" * 32)
                 + "\n" + self.frame() + "\n").encode("ascii")
         self.assertEqual(passu.PassphraseReader(Port(data)).read_passphrase(1, False, self.ID), self.PHRASE)
+
+
+    def test_device_error_advice(self):
+        want = ("Device reported: entropy source failed, halting. Try again; "
+                "if it keeps happening, don't use the device")
+        for request_id in (None, self.ID):
+            port = Port(b"\nDEVICE-ERROR: entropy source failed, halting\n")
+            with self.subTest(request_id=request_id), \
+                    self.assertRaises(SystemExit) as caught:
+                passu.PassphraseReader(port).read_passphrase(1, False, request_id)
+            self.assertEqual(caught.exception.code, want)
 
 
 if __name__ == "__main__":

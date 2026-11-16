@@ -124,6 +124,12 @@ def shape(groups, words, digits, spaces):
     return (" " if spaces else "-").join(groups)
 
 
+def device_error(reason):
+    """Exit on a DEVICE-ERROR line (a startup or hardware failure)."""
+    sys.exit(f"Device reported: {reason}. Try again; if it keeps happening, "
+             "don't use the device")
+
+
 def parse_response(line, request_id):
     """Ignore unrelated replies; reject invalid matching machine responses."""
     prefix = f"PASSU/1 {request_id} "
@@ -169,7 +175,7 @@ class PassphraseReader:
                         return phrase
                     m = DEVICE_ERROR.search(line)
                     if m:
-                        sys.exit(f"Device reported: {m.group(1)}")
+                        device_error(m.group(1))
                     continue
                 if bare_ok and FORMAT.fullmatch(line.strip()):
                     return line.strip()
@@ -184,8 +190,7 @@ class PassphraseReader:
                     sys.exit(f"Device reported an error: {m.group(1)}")
                 m = DEVICE_ERROR.search(line)
                 if m:
-                    sys.exit(f"Device reported: {m.group(1)}. Try again; if it "
-                             "keeps happening, don't use the device")
+                    device_error(m.group(1))
             self.buf += self.port.read(256)
             if len(self.buf) > 4096:
                 sys.exit("Serial response exceeds maximum size")

@@ -1,30 +1,6 @@
-import importlib.util
-from pathlib import Path
-import sys
-import types
 import unittest
-from unittest.mock import patch
 
-# Reader tests do not require pyserial or a connected device.
-spec = importlib.util.spec_from_file_location("passu", Path(__file__).parents[1] / "tools/passu.py")
-passu = importlib.util.module_from_spec(spec)
-serial = types.ModuleType("serial")
-tools = types.ModuleType("serial.tools")
-tools.list_ports = types.SimpleNamespace()
-with patch.dict(sys.modules, {"serial": serial, "serial.tools": tools}):
-    spec.loader.exec_module(passu)
-
-
-class Port:
-    def __init__(self, *chunks):
-        self.chunks = list(chunks)
-        self.reads = 0
-
-    def read(self, size):
-        self.reads += 1
-        if not self.chunks:
-            raise AssertionError("reader discarded buffered data")
-        return self.chunks.pop(0)
+from passu_testlib import Port, passu
 
 
 class ReaderTests(unittest.TestCase):
