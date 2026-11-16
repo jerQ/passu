@@ -122,35 +122,41 @@ def shape(groups, words, digits, spaces):
     return (" " if spaces else "-").join(groups)
 
 
-def read_passphrase(port, timeout, bare_ok):
-    """Return the next passphrase from the serial stream, waiting at most
-    `timeout` seconds (None: no limit). With bare_ok, an untagged line in
-    the passphrase format (a button press) counts too."""
-    deadline = time.monotonic() + timeout if timeout is not None else None
-    buf = b""
-    while deadline is None or time.monotonic() < deadline:
-        buf += port.read(256)
-        while b"\n" in buf:
-            raw, buf = buf.split(b"\n", 1)
-            line = raw.decode("ascii", errors="replace").rstrip("\r")
-            if bare_ok and FORMAT.fullmatch(line.strip()):
-                return line.strip()
-            m = RESULT.search(line)
-            if m:
-                phrase = m.group(1)
-                if FORMAT.fullmatch(phrase):
-                    return phrase
-                info("Ignoring a malformed passphrase line (serial noise?)")
-            m = ERROR.search(line)
-            if m:
-                sys.exit(f"Device reported an error: {m.group(1)}")
-            m = DEVICE_ERROR.search(line)
-            if m:
-                sys.exit(f"Device reported: {m.group(1)}. Try again; if it "
-                         "keeps happening, don't use the device")
-    sys.exit(f"No answer from the device within {REQUEST_TIMEOUT} s (is "
-             "'Generate on Enter in serial console' enabled in the firmware? "
-             "If not, use --button)")
+class PassphraseReader:
+    """Keep unread serial bytes across requests and button presses."""
+
+    def __init__(self, port):
+        self.port = port
+        self.buf = b""
+
+    def read_passphrase(self, timeout, bare_ok):
+        """Return the next passphrase from the serial stream, waiting at most
+        `timeout` seconds (None: no limit). With bare_ok, an untagged line in
+        the passphrase format (a button press) counts too."""
+        deadline = time.monotonic() + timeout if timeout is not None else None
+        while deadline is None or time.monotonic() < deadline:
+            while b"\n" in self.buf:
+                raw, self.buf = self.buf.split(b"\n", 1)
+                line = raw.decode("ascii", errors="replace").rstrip("\r")
+                if bare_ok and FORMAT.fullmatch(line.strip()):
+                    return line.strip()
+                m = RESULT.search(line)
+                if m:
+                    phrase = m.group(1)
+                    if FORMAT.fullmatch(phrase):
+                        return phrase
+                    info("Ignoring a malformed passphrase line (serial noise?)")
+                m = ERROR.search(line)
+                if m:
+                    sys.exit(f"Device reported an error: {m.group(1)}")
+                m = DEVICE_ERROR.search(line)
+                if m:
+                    sys.exit(f"Device reported: {m.group(1)}. Try again; if it "
+                             "keeps happening, don't use the device")
+            self.buf += self.port.read(256)
+        sys.exit(f"No answer from the device within {REQUEST_TIMEOUT} s (is "
+                 "'Generate on Enter in serial console' enabled in the firmware? "
+                 "If not, use --button)")
 
 
 def main():
@@ -185,6 +191,7 @@ def main():
     try:
         time.sleep(0.1)
         port.reset_input_buffer()          # drop anything printed before we came
+        reader = PassphraseReader(port)
         for i in range(args.count):
             groups = []
             while len(groups) < args.words:
@@ -201,7 +208,7 @@ def main():
                     port.write(b"\n")
                     timeout = REQUEST_TIMEOUT
                 groups += SEPARATOR.split(
-                    read_passphrase(port, timeout, bare_ok=args.button))
+                    reader.read_passphrase(timeout, bare_ok=args.button))
             phrase = shape(groups, args.words, args.digits, args.spaces)
             groups = None
             if args.copy:
