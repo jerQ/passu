@@ -40,6 +40,8 @@ typedef int trigger_t;
 static void generator_task(void *p) { (void)p; }
 #if CONFIG_DW_SERIAL_TRIGGER
 static void serial_task(void *p) { (void)p; }
+/* failure == 4 makes the console driver installation fail. */
+static bool serial_console_init(void) { return failure != 4; }
 #endif
 static int xTaskCreate(void (*fn)(void *), const char *name, unsigned stack,
                        void *arg, unsigned priority, void *handle) {
@@ -62,13 +64,15 @@ static void vTaskDelay(unsigned ticks) { (void)ticks; longjmp(stopped, 1); }
 
 CHECKS = r'''
 int main(void) {
-    for (failure = 0; failure <= (CONFIG_DW_SERIAL_TRIGGER ? 3 : 2); failure++) {
+    /* failure: 1 queue, 2 generator task, 3 serial task, 4 console driver */
+    for (failure = 0; failure <= (CONFIG_DW_SERIAL_TRIGGER ? 4 : 2); failure++) {
         tasks = button = ready = device_error = 0;
         int halted = setjmp(stopped);
         if (!halted) app_main();
         if (failure) {
             assert(halted && device_error == 1 && ready == 0 && button == 0);
-            assert(tasks == failure - 1);
+            /* The console driver is installed after the generator task. */
+            assert(tasks == (failure == 4 ? 1 : failure - 1));
         } else {
             assert(!halted && ready == 1 && button == 1 && device_error == 0);
         }

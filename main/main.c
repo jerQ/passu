@@ -21,6 +21,10 @@
 #include <strings.h>
 
 #include "driver/gpio.h"
+#if CONFIG_DW_SERIAL_TRIGGER && CONFIG_ESP_CONSOLE_UART
+#include "driver/uart.h"
+#include "driver/uart_vfs.h"
+#endif
 #include "esp_cpu.h"
 #include "esp_log.h"
 #include "esp_system.h"
@@ -149,12 +153,37 @@ static void button_init(void)
 }
 
 #if CONFIG_DW_SERIAL_TRIGGER
+/* Console receive buffer for a UART console, in bytes. Replies are longer
+ * than requests, so during a burst input piles up while output drains;
+ * 4 KB holds about 100 back-to-back PASSU/1 request lines. */
+#define SERIAL_RX_BUFFER 4096
+
+/* Give a UART console a driver-backed receive buffer. Without the driver,
+ * stdin reads the 128-byte hardware FIFO directly and serial_task polls it,
+ * so input arriving faster than the poll overflowed the FIFO and lost bytes.
+ * With the driver, an interrupt fills a ring buffer and stdin reads block
+ * until data arrives. A USB-Serial/JTAG console (ESP32-C3) can't overrun:
+ * USB flow control holds the host back, so it keeps the default path.
+ * Call before serial_task starts reading stdin. */
+static bool serial_console_init(void)
+{
+#if CONFIG_ESP_CONSOLE_UART
+    if (uart_driver_install(CONFIG_ESP_CONSOLE_UART_NUM, SERIAL_RX_BUFFER, 0, 0,
+                            NULL, 0) != ESP_OK) {
+        return false;
+    }
+    uart_vfs_dev_use_driver(CONFIG_ESP_CONSOLE_UART_NUM);
+#endif
+    return true;
+}
+
 /* Task-context producer. serial_parser_feed() turns bytes into events: an
  * empty line (CR, LF, or CRLF counted once) is a manual Enter, and a
  * "PASSU/1 <id>" line is a machine request whose id travels in the trigger.
  * Malformed and overlong lines are discarded without generating anything
- * (see PROTOCOL.md). EOF means no console input is available; sleep briefly
- * to avoid spinning. Queue sends do not wait: a full queue drops a manual
+ * (see PROTOCOL.md). On a UART console, reads block until input arrives;
+ * EOF (no input on the polled USB-Serial/JTAG console) sleeps briefly to
+ * avoid spinning. Queue sends do not wait: a full queue drops a manual
  * Enter silently and answers a machine request with a tagged error. */
 static void serial_task(void *arg)
 {
@@ -168,7 +197,8 @@ static void serial_task(void *arg)
             continue;
         }
         trigger_t t = { .type = TRIGGER_SERIAL, .cycles = esp_cpu_get_cycle_count() };
-        serial_event_t event = serial_parser_feed(&parser, c, t.request_id);
+        uint32_t now_ms = pdTICKS_TO_MS(xTaskGetTickCount());
+        serial_event_t event = serial_parser_feed(&parser, c, now_ms, t.request_id);
         if (event != SERIAL_NONE && xQueueSend(s_triggers, &t, 0) != pdTRUE) {
             if (event == SERIAL_REQUEST) {
                 printf("\nPASSU/1 %s ERROR trigger queue full\n", t.request_id);
@@ -319,6 +349,9 @@ void app_main(void)
         device_halt("generator task creation failed");
     }
 #if CONFIG_DW_SERIAL_TRIGGER
+    if (!serial_console_init()) {
+        device_halt("console UART driver installation failed");
+    }
     if (xTaskCreate(serial_task, "serial", 2560, NULL, 4, NULL) != pdPASS) {
         device_halt("serial task creation failed");
     }

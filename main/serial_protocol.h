@@ -17,7 +17,8 @@ typedef struct {
 } serial_parser_t;
 
 /* Invalid/overlong lines are discarded through their next terminator.
- * Feed bytes only, not EOF/timeouts. id is filled only for SERIAL_REQUEST. */
-serial_event_t serial_parser_feed(serial_parser_t *p, int c,
+ * Feed bytes only, not EOF/timeouts. now_ms is a free-running millisecond
+ * clock (see serial_enter_feed). id is filled only for SERIAL_REQUEST. */
+serial_event_t serial_parser_feed(serial_parser_t *p, int c, uint32_t now_ms,
                                   char id[SERIAL_REQUEST_ID_LEN + 1]);
 uint32_t serial_crc32(const char *data, size_t len);

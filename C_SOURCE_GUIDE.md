@@ -27,7 +27,7 @@ constructing each layer without an ESP32.
 | [main/condition.c](main/condition.c) | Fresh-input refills, partial reads from digest blocks, immediate erasure of consumed bytes, and sticky failures. |
 | [main/entropy_radio.h](main/entropy_radio.h) | Boot-only radio lifecycle and the hardware-source adapter contract. |
 | [main/entropy_radio.c](main/entropy_radio.c) | ESP-IDF initialization, station events, atomic running flag, and checks around hardware RNG reads. |
-| [main/serial_enter.h](main/serial_enter.h) | Header-only Enter detector: CR, LF, and CRLF (once). Feed only real bytes, never EOF. Relies on `sdkconfig.defaults` disabling ESP-IDF's CR-to-LF stdin conversion. |
+| [main/serial_enter.h](main/serial_enter.h) | Header-only Enter detector: CR, LF, and CRLF (once, if the LF follows within `SERIAL_ENTER_CRLF_MS`). Feed only real bytes with a millisecond timestamp, never EOF. Relies on `sdkconfig.defaults` disabling ESP-IDF's CR-to-LF stdin conversion. |
 | [main/serial_protocol.h](main/serial_protocol.h) | `PASSU/1` request parser state, event types, and request-identifier size. The wire format is in [PROTOCOL.md](PROTOCOL.md). |
 | [main/serial_protocol.c](main/serial_protocol.c) | Bounded line buffer: empty lines are manual Enter, valid `PASSU/1 <id>` lines are requests, malformed or overlong lines are discarded through their terminator. Also the CRC-32 that hosts check. |
 | [main/main.c](main/main.c) | Boot ordering, wordlist hash verification, queue producers, task ownership, serial output, and resource-failure handling. |
