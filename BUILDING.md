@@ -372,13 +372,13 @@ It also builds for Windows (`GOOS=windows`), but that isn't tested yet.
 ### Serial monitor
 
 In `idf.py monitor`, press **BOOT** or **Enter** to generate. A BOOT press
-prints the bare passphrase, one per line. Enter (which is what the host
-command sends) prints it with a tag instead. Status and errors are always
+prints the bare passphrase, one per line. Manual Enter prints it with a
+tag instead. The host command uses protocol v1 with request identifiers. Status and errors are always
 tagged:
 
 ```text
 <passphrase>                                          (BOOT press)
-PASSPHRASE: <passphrase>                              (Enter / host command)
+PASSPHRASE: <passphrase>                              (manual Enter)
 PASSPHRASE-ERROR: <reason>
 DEVICE-ERROR: <reason>                                (crash notice at boot)
 ```
@@ -464,3 +464,10 @@ following:
   [CC BY 3.0 US](https://creativecommons.org/licenses/by/3.0/us/). See the
   [EFF's diceware page](https://www.eff.org/dice) and
   [copyright policy](https://www.eff.org/copyright).
+
+## Host and firmware compatibility
+
+The host's automatic requests use [serial protocol v1](PROTOCOL.md).
+Update host and firmware together; older firmware will time out rather than
+silently use uncorrelated responses. Manual Enter and `--button` remain
+available for older firmware.

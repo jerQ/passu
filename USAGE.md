@@ -76,3 +76,10 @@ only about 12.9 bits, assuming uniform selection.
   the terminal afterwards.
 - The computer sees every passphrase sent over serial. Don't generate
   passphrases on a computer you don't trust.
+
+## Host and firmware compatibility
+
+The host's automatic requests use [serial protocol v1](PROTOCOL.md).
+Update host and firmware together; older firmware will time out rather than
+silently use uncorrelated responses. Manual Enter and `--button` remain
+available for older firmware.

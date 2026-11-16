@@ -243,3 +243,10 @@ following:
   [CC BY 3.0 US](https://creativecommons.org/licenses/by/3.0/us/). See the
   [EFF's diceware page](https://www.eff.org/dice) and
   [copyright policy](https://www.eff.org/copyright).
+
+## Host and firmware compatibility
+
+The host's automatic requests use [serial protocol v1](PROTOCOL.md).
+Update host and firmware together; older firmware will time out rather than
+silently use uncorrelated responses. Manual Enter and `--button` remain
+available for older firmware.

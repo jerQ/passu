@@ -421,21 +421,19 @@ Everything the host needs to know is a tagged line:
 
 | Line | Meaning |
 |---|---|
-| `PASSPHRASE: <phrase>` | Success, requested over serial |
+| `PASSU/1 <id> <groups> <length> <crc32> <phrase>` | Machine request success |
+| `PASSU/1 <id> ERROR <reason>` | Machine request failure |
+| `PASSPHRASE: <phrase>` | Manual Enter success |
 | `<phrase>` (untagged) | Success, requested with the button |
 | `PASSPHRASE-ERROR: <reason>` | Generation failed; nothing was produced |
 | `DEVICE-ERROR: <reason>` | Crash notice at boot |
 
-Tags make the output robust against boot messages, the ROM bootloader's
-noise and anything else on the line, and they keep the host side simple.
-
-**Button presses print the bare passphrase.** A button press usually means
-a person is reading the serial monitor, and for them the tag is clutter:
-one passphrase per line is easier to copy. A serial request comes from the
-host command, so it gets the tag. Status and error lines keep their tags
-in both cases, so an error can never pass for a passphrase. With
-`--button`, the host command also accepts an untagged line, but only if
-the whole line matches the passphrase format.
+[Protocol v1](PROTOCOL.md) specifies the request identifiers and integrity
+metadata checked by both hosts. The identifier distinguishes delayed replies
+from current requests. CRC detects accidental corruption; it does not
+authenticate the firmware. Manual Enter retains tagged legacy output, and
+button presses print a bare phrase. `--button` accepts legacy phrase lines
+by format, without machine-response integrity metadata.
 
 ### The host command
 
@@ -444,17 +442,19 @@ the whole line matches the passphrase format.
 - **No DTR/RTS toggling** when opening the port. On most ESP32 boards these
   lines drive reset and boot mode, and the default pyserial open would
   reset the chip.
-- **Old output is dropped.** Anything printed before the command started
-  is discarded, so it only returns a passphrase made for this request.
-- **Serial request by default.** `passu -n 3` sends Enter three times and
-  reads three tagged replies; nobody has to press the button.
-  `--button` waits for presses instead.
+- **Request identifiers.** Startup clears already-buffered input. Each
+  automatic request has a fresh random identifier; responses with other
+  identifiers are ignored, including delayed responses to older requests.
+- **Serial request by default.** The host sends a `PASSU/1` request for each
+  needed batch and validates the matching reply. `--button` waits for
+  legacy button output instead. Automatic mode requires updated firmware.
 - **Fixed timeouts, no option.** A serial request is answered within
   milliseconds, so a fixed 5 s limit only catches a hung board or the
   wrong port. A button press waits for a person, so `--button` has no
   limit and Ctrl+C ends it.
-- **Format check.** A passphrase is accepted only if it matches the
-  word-digit-group format. Line noise is rejected, not passed on.
+- **Response validation.** Automatic mode checks the echoed identifier,
+  group count, byte length, CRC, and word-digit-group format. Invalid
+  matching replies fail the request. Button mode checks the legacy format.
 - **stdout is only the passphrase.** Prompts and errors go to stderr, so
   `passu | something` can't pick up a message by mistake.
 - **`--copy`** puts it on the clipboard instead, to keep it out of terminal
