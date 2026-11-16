@@ -16,6 +16,7 @@
 #include "dice.h"
 #include "health.h"
 #include "passphrase.h"
+#include "serial_enter.h"
 #include "wordlist.h"
 
 static int failures;
@@ -414,10 +415,27 @@ static void test_passphrase(void)
     CHECK(strchr(out, '\0') - out >= 2);
 }
 
+static void test_serial_enter(void)
+{
+    const struct { const char *input; unsigned count; } cases[] = {
+        {"\r", 1}, {"\n", 1}, {"\r\n", 1}, {"\n\n", 2},
+        {"\r\r", 2}, {"\r\n\r\n", 2}, {"\rx\n", 2},
+    };
+    for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        serial_enter_t state = {0};
+        unsigned count = 0;
+        for (const char *p = cases[i].input; *p; p++) {
+            count += serial_enter_feed(&state, *p);
+        }
+        CHECK(count == cases[i].count);
+    }
+}
+
 int main(void)
 {
     urandom = fopen("/dev/urandom", "rb");
     if (!urandom) { perror("urandom"); return 2; }
+    test_serial_enter();
     test_wordlist();
     test_dice();
     test_health();
