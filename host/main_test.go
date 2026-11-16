@@ -203,3 +203,30 @@ func TestSessionOutputFailure(t *testing.T) {
 		})
 	}
 }
+
+// Final data must be consumed before reporting the accompanying EOF.
+type finalReplies struct{ calls int }
+
+func (r *finalReplies) Read(p []byte) (int, error) {
+	r.calls++
+	if r.calls > 1 {
+		return 0, io.ErrUnexpectedEOF
+	}
+	return copy(p, "PASSPHRASE: apple3\nPASSPHRASE: orbit0\n"), io.EOF
+}
+func TestBufferedRepliesBeforeReadError(t *testing.T) {
+	port := &finalReplies{}
+	r := &lineReader{port: port}
+	for _, want := range []string{"apple3", "orbit0"} {
+		got, err := r.readPassphrase(time.Second, false)
+		if err != nil || got != want {
+			t.Fatalf("got %q, %v; want %q", got, err, want)
+		}
+	}
+	if port.calls != 1 {
+		t.Fatalf("read %d times, want 1", port.calls)
+	}
+	if _, err := r.readPassphrase(time.Second, false); err == nil {
+		t.Fatal("expected connection error after buffered replies")
+	}
+}
