@@ -450,18 +450,26 @@ static void test_passphrase(void)
 }
 
 /* Each case counts Enter events in a fresh state: CRLF is one, while
- * standalone CR, LF, and separated terminators each count. */
+ * standalone CR, LF, and separated terminators each count. Bytes in a case
+ * arrive at the same time unless ms[] gives per-byte arrival times. An LF
+ * completes a CRLF only within SERIAL_ENTER_CRLF_MS of the CR. */
 static void test_serial_enter(void)
 {
-    const struct { const char *input; unsigned count; } cases[] = {
-        {"\r", 1}, {"\n", 1}, {"\r\n", 1}, {"\n\n", 2},
-        {"\r\r", 2}, {"\r\n\r\n", 2}, {"\rx\n", 2},
+    const uint32_t W = SERIAL_ENTER_CRLF_MS;
+    const struct { const char *input; uint32_t ms[4]; unsigned count; } cases[] = {
+        {"\r", {0}, 1}, {"\n", {0}, 1}, {"\r\n", {0}, 1}, {"\n\n", {0}, 2},
+        {"\r\r", {0}, 2}, {"\r\n\r\n", {0}, 2}, {"\rx\n", {0}, 2},
+        {"\r\n", {1000, 1000 + W}, 1},            /* LF at the window edge */
+        {"\r\n", {1000, 1000 + W + 1}, 2},        /* just outside: own Enter */
+        {"\r\n", {1000, 5000}, 2},                /* LF seconds after a CR */
+        {"\r\n", {UINT32_MAX - 10, 20}, 1},       /* clock wraps between */
+        {"\r\n\n", {0, 1, 2}, 2},                /* CRLF, then a bare LF */
     };
     for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
         serial_enter_t state = {0};
         unsigned count = 0;
-        for (const char *p = cases[i].input; *p; p++) {
-            count += serial_enter_feed(&state, *p);
+        for (unsigned j = 0; cases[i].input[j]; j++) {
+            count += serial_enter_feed(&state, cases[i].input[j], cases[i].ms[j]);
         }
         CHECK(count == cases[i].count);
     }

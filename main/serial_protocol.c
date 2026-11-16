@@ -1,10 +1,10 @@
 #include "serial_protocol.h"
 #include <string.h>
 
-serial_event_t serial_parser_feed(serial_parser_t *p, int c,
+serial_event_t serial_parser_feed(serial_parser_t *p, int c, uint32_t now_ms,
                                   char id[SERIAL_REQUEST_ID_LEN + 1])
 {
-    bool enter = serial_enter_feed(&p->enter, c);
+    bool enter = serial_enter_feed(&p->enter, c, now_ms);
     if ((c == '\r' || c == '\n') && !enter) {
         return SERIAL_NONE;
     }

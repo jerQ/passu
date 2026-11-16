@@ -28,11 +28,18 @@ any words. Unrelated identifiers and legacy success lines are ignored in
 machine mode. Invalid matching responses fail the request. CRC detects
 accidental corruption; it does not authenticate the device or its firmware.
 
-The firmware accepts CR, LF, or CRLF line endings, with CRLF counting as
-one terminator. Empty lines retain manual generation behavior. Malformed
-and overlong nonempty request lines are discarded through the next
-terminator, and do not generate a passphrase. Queue-full and generation
-errors echo the machine request identifier.
+The firmware accepts CR, LF, or CRLF line endings. CRLF counts as one
+terminator when the LF arrives within 50 ms of the CR; a later LF is a
+separate Enter. Empty lines retain manual generation behavior. Malformed and
+overlong nonempty request lines are discarded through the next terminator,
+and do not generate a passphrase. Queue-full and generation errors echo the
+machine request identifier.
+
+Hosts send one request and wait for its reply. On a UART console the
+firmware buffers 4 KB of input, so even a burst of about 100 back-to-back
+requests is not lost: each gets a phrase or a queue-full error. Longer
+bursts can overflow the buffer; their damaged lines are discarded, never
+answered.
 
 A bare phrase from a button press is retained for manual use. Button mode
 checks its format but does not have machine-response integrity metadata.
