@@ -1,4 +1,6 @@
-/* Coalesce CRLF while accepting standalone CR and LF as Enter. */
+/* Coalesce CRLF while accepting standalone CR and LF as Enter. This needs
+ * raw console input: sdkconfig.defaults disables ESP-IDF's CR-to-LF
+ * stdin conversion, which would otherwise turn CRLF into two LFs. */
 #pragma once
 #include <stdbool.h>
 

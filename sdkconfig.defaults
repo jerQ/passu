@@ -21,3 +21,9 @@ CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
 
 # Bootloader: only warnings and errors, no partition table or segment list.
 CONFIG_BOOTLOADER_LOG_LEVEL_WARN=y
+
+# Pass serial input through unchanged. ESP-IDF's default converts every
+# incoming CR to LF, so a terminal's CRLF would arrive as two newlines and
+# trigger two passphrases; main/serial_enter.h coalesces CRLF itself. The
+# old NEWLIB_ name works on ESP-IDF v5.3 and is renamed to LIBC_ on v6.x.
+CONFIG_NEWLIB_STDIN_LINE_ENDING_LF=y
