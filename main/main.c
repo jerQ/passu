@@ -26,6 +26,7 @@
 #include "entropy_radio.h"
 #include "health.h"
 #include "passphrase.h"
+#include "serial_enter.h"
 #include "wordlist.h"
 
 static const char *TAG = "passu";
@@ -130,9 +131,10 @@ static void button_init(void)
 static void serial_task(void *arg)
 {
     (void)arg;
+    serial_enter_t enter = {0};
     for (;;) {
         int c = fgetc(stdin);   /* non-blocking with the default console */
-        if (c == '\r' || c == '\n') {
+        if (c != EOF && serial_enter_feed(&enter, c)) {
             trigger_t t = { TRIGGER_SERIAL, esp_cpu_get_cycle_count() };
             xQueueSend(s_triggers, &t, 0);
         } else if (c == EOF) {
