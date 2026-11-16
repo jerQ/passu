@@ -223,6 +223,15 @@ static void generator_task(void *arg)
     }
 }
 
+static void device_halt(const char *reason)
+{
+    printf("\nDEVICE-ERROR: %s, halting\n", reason);
+    fflush(stdout);
+    for (;;) {
+        vTaskDelay(portMAX_DELAY);
+    }
+}
+
 void app_main(void)
 {
     report_previous_crash();
@@ -244,12 +253,20 @@ void app_main(void)
     printf("Entropy: radio running, startup health test passed\n");
 
     s_triggers = xQueueCreate(8, sizeof(trigger_t));
-    configASSERT(s_triggers);
+    if (!s_triggers) {
+        device_halt("trigger queue allocation failed");
+    }
 
-    button_init();
-    xTaskCreate(generator_task, "generator", 4096, NULL, 5, NULL);
+    if (xTaskCreate(generator_task, "generator", 4096, NULL, 5, NULL) != pdPASS) {
+        device_halt("generator task creation failed");
+    }
 #if CONFIG_DW_SERIAL_TRIGGER
-    xTaskCreate(serial_task, "serial", 2560, NULL, 4, NULL);
+    if (xTaskCreate(serial_task, "serial", 2560, NULL, 4, NULL) != pdPASS) {
+        device_halt("serial task creation failed");
+    }
+#endif
+    button_init();
+#if CONFIG_DW_SERIAL_TRIGGER
     printf("Press the button on GPIO%d or Enter for a passphrase "
            "(%d groups, ~%d bits)\n", CONFIG_DW_BUTTON_GPIO, CONFIG_DW_GROUPS,
            (CONFIG_DW_GROUPS * 1625) / 100);
