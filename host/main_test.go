@@ -172,3 +172,34 @@ func TestSession(t *testing.T) {
 		t.Fatalf("copy: clip %q, out %q, err %v", clip, out.String(), err)
 	}
 }
+
+type failingWriter struct {
+	n   int
+	err error
+}
+
+func (w failingWriter) Write([]byte) (int, error) { return w.n, w.err }
+
+func TestSessionOutputFailure(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		writer failingWriter
+		want   error
+	}{
+		{"write failure", failingWriter{0, io.ErrClosedPipe}, io.ErrClosedPipe},
+		{"partial write failure", failingWriter{3, io.ErrClosedPipe}, io.ErrClosedPipe},
+		{"short write", failingWriter{3, nil}, io.ErrShortWrite},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dev := &fakeDevice{}
+			clip, err := session(dev, options{words: 5, digits: true, count: 2}, tc.writer)
+			var f fatal
+			if !errors.As(err, &f) || err.Error() != "Cannot write passphrase to stdout: "+tc.want.Error() {
+				t.Fatalf("got error %v, want stdout failure containing %v", err, tc.want)
+			}
+			if clip != "" || dev.requests != 1 {
+				t.Fatalf("clip %q, requests %d; want empty clip and stop after first request", clip, dev.requests)
+			}
+		})
+	}
+}
