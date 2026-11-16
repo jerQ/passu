@@ -57,7 +57,7 @@ like best, because that makes the result less random.
 | 5 | ~65 bits | ~81 bits | |
 | 6 | ~78 bits | ~97 bits | [EFF recommendation](https://www.eff.org/dice) |
 | 7 | ~90 bits | ~114 bits | |
-| 8 | ~103 bits | ~130 bits | passu default |
+| 8 | ~103 bits | ~130 bits | firmware batch default |
 
 "Words only" is what you get if you leave the digits out. The number of groups
 the firmware generates can be changed in `idf.py menuconfig` → *passu* →
