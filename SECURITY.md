@@ -288,16 +288,17 @@ credentials or settings ever live on the device.
 - **Doesn't reset the board.** It opens the port without toggling DTR/RTS,
   which on most ESP32 boards are wired to reset and boot mode. An unintended
   reset in the middle of a request could otherwise drop or confuse output.
-- **Ignores old output.** Anything printed before the command started is
-  discarded, so a stale passphrase still sitting in the serial buffer, or one
-  produced for someone else, is never returned.
-- **Requests over serial by default.** It sends Enter for each passphrase
-  and accepts only tagged `PASSPHRASE:` replies. With `--button` it waits
-  for presses and also accepts the bare line a press prints, but only if
-  the whole line is in the passphrase format.
-- **Checks the format.** A line is accepted only if it matches the
-  word-digit-group format. Serial noise or a corrupted line is rejected
-  instead of being passed on as a passphrase.
+- **Correlates automatic requests.** Startup clears already-buffered input.
+  Each automatic request has a fresh random 128-bit identifier, echoed in
+  the reply. Responses for other identifiers are ignored.
+- **Validates automatic responses.** Both hosts use [protocol v1](PROTOCOL.md)
+  and verify the identifier, group count, byte length, CRC, and phrase format.
+  Invalid matching responses fail the request. CRC detects accidental
+  corruption; it does not authenticate firmware or protect against a
+  malicious device. Updated hosts and firmware must be installed together.
+- **Manual compatibility.** Enter retains legacy tagged output. `--button`
+  accepts legacy phrase lines by format without the machine response's
+  integrity checks, including with older firmware.
 - **Passphrase only on stdout.** Prompts and errors go to stderr, so
   `passu > file` or `passu | tool` passes on the passphrase and nothing
   else.
@@ -314,9 +315,9 @@ credentials or settings ever live on the device.
   is generated independently, so joined replies are as strong as one long
   passphrase: ~16.2 bits per group, ~12.9 without its digit. The default
   5 groups are ~81 bits, 5 words without digits ~65 bits.
-- **Exits on device errors.** `PASSPHRASE-ERROR` and `DEVICE-ERROR`
-  lines end the command with an error rather than
-  leaving it waiting. A serial request with no answer within 5 seconds
+- **Exits on device errors.** Matching machine error frames and
+  `DEVICE-ERROR` notices end automatic requests with an error. Button mode
+  also handles legacy `PASSPHRASE-ERROR` lines. A serial request with no answer within 5 seconds
   also ends with an error.
 - **Drops its reference** to each passphrase after output. Python can't
   reliably wipe a string from memory, so this only limits how long it stays

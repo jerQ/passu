@@ -2,6 +2,8 @@ package main
 
 import (
 	"errors"
+	"fmt"
+	"hash/crc32"
 	"io"
 	"reflect"
 	"strings"
@@ -117,22 +119,26 @@ func TestParseArgs(t *testing.T) {
 	}
 }
 
-// fakeDevice answers each "\n" with a tagged 8-group passphrase, like the
-// firmware with "Generate on Enter" on.
+// fakeDevice answers each protocol v1 request with an 8-group response.
 type fakeDevice struct {
 	pending  []string
 	requests int
 }
 
 func (d *fakeDevice) Write(p []byte) (int, error) {
-	for _, b := range p {
-		if b == '\n' {
-			d.requests++
-			d.pending = append(d.pending, "I (1) noise\r\nPASSPHRASE: "+
-				"apple3-t-shirt7-orbit0-canopy5-mellow2-zigzag9-fossil4-tundra1\r\n")
-		}
+	fields := strings.Fields(string(p))
+	if len(fields) != 2 || fields[0] != "PASSU/1" || len(fields[1]) != 32 {
+		return 0, fmt.Errorf("invalid machine request")
 	}
+	d.requests++
+	phrase := "apple3-t-shirt7-orbit0-canopy5-mellow2-zigzag9-fossil4-tundra1"
+	d.pending = append(d.pending, "I (1) noise\r\n"+response(fields[1], phrase))
 	return len(p), nil
+}
+
+func response(id, phrase string) string {
+	return fmt.Sprintf("PASSU/1 %s %d %d %08x %s\n", id, len(splitGroups(phrase)),
+		len(phrase), crc32.ChecksumIEEE([]byte(phrase)), phrase)
 }
 
 func (d *fakeDevice) Read(p []byte) (int, error) {
@@ -170,6 +176,67 @@ func TestSession(t *testing.T) {
 	clip, err = session(&fakeDevice{}, o, &out)
 	if err != nil || clip != "apple t-shirt orbit" || out.Len() != 0 {
 		t.Fatalf("copy: clip %q, out %q, err %v", clip, out.String(), err)
+	}
+}
+
+func TestMachineResponse(t *testing.T) {
+	id := "00112233445566778899aabbccddeeff"
+	phrase := "apple3-orbit0-canopy5-mellow2-zigzag9"
+	valid := strings.TrimSuffix(response(id, phrase), "\n")
+	got, matched, err := parseResponse(valid, id)
+	if !matched || err != nil || got != phrase {
+		t.Fatalf("valid: %q %v %v", got, matched, err)
+	}
+	_, matched, err = parseResponse(valid, strings.Repeat("f", 32))
+	if matched || err != nil {
+		t.Fatal("unrelated identifier accepted")
+	}
+	for _, bad := range []string{
+		strings.Replace(valid, "apple3", "apple4", 1),
+		strings.Replace(valid, " 5 ", " 6 ", 1),
+		strings.TrimSuffix(valid, "-zigzag9"),
+		"PASSU/1 " + id + " 5 1 00000000 apple3",
+		"PASSU/1 " + id + " malformed",
+		"PASSU/1 " + id + " ERROR entropy failure",
+	} {
+		if _, matched, err := parseResponse(bad, id); !matched || err == nil {
+			t.Fatalf("accepted invalid matching frame %q", bad)
+		}
+	}
+	got, err = (&lineReader{port: &chunkReader{[]string{
+		"PASSPHRASE: apple3\n" + response(strings.Repeat("f", 32), phrase),
+		response(id, phrase),
+	}}}).readPassphrase(time.Second, false, id)
+	if err != nil || got != phrase {
+		t.Fatalf("stale reply: %q %v", got, err)
+	}
+}
+
+type resetFailure struct{ fakeDevice }
+
+func (*resetFailure) ResetInputBuffer() error { return io.ErrUnexpectedEOF }
+func TestResetInputFailure(t *testing.T) {
+	d := &resetFailure{}
+	_, err := session(d, options{words: 5, count: 1}, io.Discard)
+	if err == nil || d.requests != 0 {
+		t.Fatalf("err %v requests %d", err, d.requests)
+	}
+}
+
+type shortRequest struct{ fakeDevice }
+
+func (*shortRequest) Write(p []byte) (int, error) { return len(p) - 1, nil }
+func TestShortRequest(t *testing.T) {
+	_, err := session(&shortRequest{}, options{words: 5, count: 1}, io.Discard)
+	if err == nil {
+		t.Fatal("short request accepted")
+	}
+}
+
+func TestFirmwareCRCVector(t *testing.T) {
+	frame := "PASSU/1 00112233445566778899aabbccddeeff 5 37 8999a807 apple3-orbit0-canopy5-mellow2-zigzag9"
+	if _, matched, err := parseResponse(frame, "00112233445566778899aabbccddeeff"); !matched || err != nil {
+		t.Fatalf("firmware CRC vector rejected: %v", err)
 	}
 }
 

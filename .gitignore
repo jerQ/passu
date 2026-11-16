@@ -21,3 +21,5 @@ __pycache__/
 
 # Release images (tools/release.sh)
 dist/
+
+test/test_protocol

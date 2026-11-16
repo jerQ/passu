@@ -6,14 +6,18 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"os"
 	"os/exec"
 	"os/signal"
 	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -211,7 +215,11 @@ type lineReader struct {
 // readPassphrase returns the next passphrase from the serial stream, waiting
 // at most timeout (0: no limit). With bareOK, an untagged line in the
 // passphrase format (a button press) counts too.
-func (r *lineReader) readPassphrase(timeout time.Duration, bareOK bool) (string, error) {
+func (r *lineReader) readPassphrase(timeout time.Duration, bareOK bool, requestID ...string) (string, error) {
+	id := ""
+	if len(requestID) > 0 {
+		id = requestID[0]
+	}
 	var deadline time.Time
 	if timeout > 0 {
 		deadline = time.Now().Add(timeout)
@@ -225,6 +233,16 @@ func (r *lineReader) readPassphrase(timeout time.Duration, bareOK bool) (string,
 			}
 			line := asciiLine(r.buf[:i])
 			r.buf = r.buf[i+1:]
+			if id != "" {
+				phrase, matched, frameErr := parseResponse(line, id)
+				if matched {
+					return phrase, frameErr
+				}
+				if m := deviceErrorRe.FindStringSubmatch(line); m != nil {
+					return "", fatalf("Device reported: %s", m[1])
+				}
+				continue
+			}
 			if bareOK && formatRe.MatchString(strings.TrimSpace(line)) {
 				return strings.TrimSpace(line), nil
 			}
@@ -247,11 +265,41 @@ func (r *lineReader) readPassphrase(timeout time.Duration, bareOK bool) (string,
 		}
 		n, err := r.port.Read(chunk)
 		r.buf = append(r.buf, chunk[:n]...)
-		r.readErr = err // io.Reader may return valid data together with an error.
+		r.readErr = err
+		if len(r.buf) > 4096 {
+			return "", fatal("Serial response exceeds maximum size")
+		}
 	}
 	return "", fatalf("No answer from the device within %d s (is "+
 		"'Generate on Enter in serial console' enabled in the firmware? "+
-		"If not, use --button)", int(requestTimeout/time.Second))
+		"Use matching firmware and host versions, or use --button)", int(requestTimeout/time.Second))
+}
+
+// parseResponse ignores unrelated replies and rejects corrupt matching frames.
+func parseResponse(line, id string) (string, bool, error) {
+	prefix := "PASSU/1 " + id + " "
+	if !strings.HasPrefix(line, prefix) {
+		return "", false, nil
+	}
+	payload := strings.TrimPrefix(line, prefix)
+	if strings.HasPrefix(payload, "ERROR ") {
+		return "", true, fatalf("Device reported an error: %s", strings.TrimPrefix(payload, "ERROR "))
+	}
+	fields := strings.Split(payload, " ")
+	invalid := fatal("Invalid or corrupted device response")
+	if len(fields) != 4 {
+		return "", true, invalid
+	}
+	groups, e1 := strconv.Atoi(fields[0])
+	length, e2 := strconv.Atoi(fields[1])
+	crc, e3 := strconv.ParseUint(fields[2], 16, 32)
+	phrase := fields[3]
+	if e1 != nil || e2 != nil || e3 != nil || groups < 5 || groups > 16 ||
+		length != len(phrase) || len(fields[2]) != 8 || !formatRe.MatchString(phrase) ||
+		len(splitGroups(phrase)) != groups || crc32.ChecksumIEEE([]byte(phrase)) != uint32(crc) {
+		return "", true, invalid
+	}
+	return phrase, true, nil
 }
 
 // asciiLine decodes a line like Python's ascii/errors="replace": anything
@@ -345,7 +393,9 @@ func run(o options) error {
 func session(port io.ReadWriter, o options, stdout io.Writer) (string, error) {
 	if rb, ok := port.(interface{ ResetInputBuffer() error }); ok {
 		time.Sleep(100 * time.Millisecond)
-		rb.ResetInputBuffer() // drop anything printed before we came
+		if err := rb.ResetInputBuffer(); err != nil {
+			return "", fatalf("Cannot clear serial input: %v", err)
+		}
 	}
 	r := &lineReader{port: port}
 	out := bufio.NewWriter(stdout)
@@ -354,6 +404,7 @@ func session(port io.ReadWriter, o options, stdout io.Writer) (string, error) {
 		var groups []string
 		for len(groups) < o.words {
 			var timeout time.Duration
+			id := ""
 			if o.button {
 				if len(groups) > 0 {
 					info(fmt.Sprintf("Press BOOT again for more words (%d/%d so far)...",
@@ -366,12 +417,18 @@ func session(port io.ReadWriter, o options, stdout io.Writer) (string, error) {
 					info("Press BOOT on the ESP32" + label + "...  (Ctrl+C to cancel)")
 				}
 			} else {
-				if _, err := port.Write([]byte("\n")); err != nil {
-					return "", fatal("Lost connection to the device (unplugged?)")
+				var nonce [16]byte
+				if _, err := rand.Read(nonce[:]); err != nil {
+					return "", fatalf("Cannot create request identifier: %v", err)
+				}
+				id = hex.EncodeToString(nonce[:])
+				request := []byte("PASSU/1 " + id + "\n")
+				if n, err := port.Write(request); err != nil || n != len(request) {
+					return "", fatal("Cannot send complete request to the device")
 				}
 				timeout = requestTimeout
 			}
-			phrase, err := r.readPassphrase(timeout, o.button)
+			phrase, err := r.readPassphrase(timeout, o.button, id)
 			if err != nil {
 				return "", err
 			}

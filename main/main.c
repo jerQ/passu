@@ -26,7 +26,7 @@
 #include "entropy_radio.h"
 #include "health.h"
 #include "passphrase.h"
-#include "serial_enter.h"
+#include "serial_protocol.h"
 #include "wordlist.h"
 
 static const char *TAG = "passu";
@@ -41,6 +41,7 @@ typedef enum { TRIGGER_BUTTON, TRIGGER_SERIAL } trigger_type_t;
 typedef struct {
     trigger_type_t type;
     uint32_t       cycles;   /* CPU cycle count at the press, mixed into the hash */
+    char request_id[SERIAL_REQUEST_ID_LEN + 1]; /* empty for manual triggers */
 } trigger_t;
 
 static wordlist_t    s_wordlist;      /* ~39 KB index, keep off the stack */
@@ -105,7 +106,7 @@ halt:
 static void IRAM_ATTR button_isr(void *arg)
 {
     (void)arg;
-    trigger_t t = { TRIGGER_BUTTON, esp_cpu_get_cycle_count() };
+    trigger_t t = { .type = TRIGGER_BUTTON, .cycles = esp_cpu_get_cycle_count() };
     BaseType_t woken = pdFALSE;
     xQueueSendFromISR(s_triggers, &t, &woken);
     if (woken) {
@@ -131,16 +132,22 @@ static void button_init(void)
 static void serial_task(void *arg)
 {
     (void)arg;
-    serial_enter_t enter = {0};
+    serial_parser_t parser = {0};
     for (;;) {
-        int c = fgetc(stdin);   /* non-blocking with the default console */
-        if (c != EOF && serial_enter_feed(&enter, c)) {
-            trigger_t t = { TRIGGER_SERIAL, esp_cpu_get_cycle_count() };
-            xQueueSend(s_triggers, &t, 0);
-        } else if (c == EOF) {
+        int c = fgetc(stdin);
+        if (c == EOF) {
             clearerr(stdin);
             vTaskDelay(pdMS_TO_TICKS(20));
+            continue;
         }
+        trigger_t t = { .type = TRIGGER_SERIAL, .cycles = esp_cpu_get_cycle_count() };
+        serial_event_t event = serial_parser_feed(&parser, c, t.request_id);
+        if (event != SERIAL_NONE && xQueueSend(s_triggers, &t, 0) != pdTRUE) {
+            if (event == SERIAL_REQUEST) {
+                printf("\nPASSU/1 %s ERROR trigger queue full\n", t.request_id);
+            }
+        }
+        secure_zero(&t, sizeof(t));
     }
 }
 #endif
@@ -205,14 +212,21 @@ static void generator_task(void *arg)
         pp_err_t err = passphrase_generate(&rng, &s_wordlist, CONFIG_DW_GROUPS,
                                            phrase, sizeof(phrase));
         conditioned_rng_wipe(&s_cond);
-        secure_zero(&t, sizeof(t));
-        /* A button press prints the bare passphrase, one per line, for a
-         * person reading the serial monitor. A serial request (the host
-         * command) gets a tagged line so it can pick the result out of the
-         * stream: "PASSPHRASE: ...". Status and errors are always tagged
-         * ("PASSPHRASE-ERROR: ...") so they can never pass for a
-         * passphrase. */
-        if (err == PP_OK) {
+        /* Machine requests echo their identifier and integrity metadata.
+         * Manual Enter retains tagged legacy output; button presses print
+         * a bare phrase. Keep the trigger until its response is complete. */
+        if (t.request_id[0] != '\0') {
+            if (err == PP_OK) {
+                size_t len = strlen(phrase);
+                printf("\nPASSU/1 %s %u %u %08lx %s\n", t.request_id,
+                       (unsigned)CONFIG_DW_GROUPS, (unsigned)len,
+                       (unsigned long)serial_crc32(phrase, len), phrase);
+            } else {
+                printf("\nPASSU/1 %s ERROR %s\n", t.request_id,
+                       s_checked.health.failed ? s_checked.health.fail_reason :
+                                                 passphrase_strerror(err));
+            }
+        } else if (err == PP_OK) {
             printf(tagged ? "\nPASSPHRASE: %s\n" : "%s\n", phrase);
         } else if (s_checked.health.failed) {
             printf("\nPASSPHRASE-ERROR: entropy health failure (%s), reset "
@@ -222,6 +236,7 @@ static void generator_task(void *arg)
         }
         fflush(stdout);
         secure_zero(phrase, sizeof(phrase));
+        secure_zero(&t, sizeof(t));
     }
 }
 

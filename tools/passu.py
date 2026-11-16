@@ -25,10 +25,12 @@ Requires pyserial (Fedora: sudo dnf install python3-pyserial).
 import argparse
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import sys
 import time
+import zlib
 
 try:
     import serial
@@ -122,6 +124,29 @@ def shape(groups, words, digits, spaces):
     return (" " if spaces else "-").join(groups)
 
 
+def parse_response(line, request_id):
+    """Ignore unrelated replies; reject invalid matching machine responses."""
+    prefix = f"PASSU/1 {request_id} "
+    if not line.startswith(prefix):
+        return None
+    payload = line[len(prefix):]
+    if payload.startswith("ERROR "):
+        sys.exit(f"Device reported an error: {payload[6:]}")
+    fields = payload.split(" ")
+    try:
+        count, length, checksum, phrase = fields
+        valid = (5 <= int(count) <= 16 and int(length) == len(phrase)
+                 and re.fullmatch(r"[0-9a-fA-F]{8}", checksum)
+                 and FORMAT.fullmatch(phrase)
+                 and len(SEPARATOR.split(phrase)) == int(count)
+                 and zlib.crc32(phrase.encode("ascii")) == int(checksum, 16))
+    except (ValueError, UnicodeError):
+        valid = False
+    if not valid:
+        sys.exit("Invalid or corrupted device response")
+    return phrase
+
+
 class PassphraseReader:
     """Keep unread serial bytes across requests and button presses."""
 
@@ -129,7 +154,7 @@ class PassphraseReader:
         self.port = port
         self.buf = b""
 
-    def read_passphrase(self, timeout, bare_ok):
+    def read_passphrase(self, timeout, bare_ok, request_id=None):
         """Return the next passphrase from the serial stream, waiting at most
         `timeout` seconds (None: no limit). With bare_ok, an untagged line in
         the passphrase format (a button press) counts too."""
@@ -138,6 +163,14 @@ class PassphraseReader:
             while b"\n" in self.buf:
                 raw, self.buf = self.buf.split(b"\n", 1)
                 line = raw.decode("ascii", errors="replace").rstrip("\r")
+                if request_id is not None:
+                    phrase = parse_response(line, request_id)
+                    if phrase is not None:
+                        return phrase
+                    m = DEVICE_ERROR.search(line)
+                    if m:
+                        sys.exit(f"Device reported: {m.group(1)}")
+                    continue
                 if bare_ok and FORMAT.fullmatch(line.strip()):
                     return line.strip()
                 m = RESULT.search(line)
@@ -154,9 +187,11 @@ class PassphraseReader:
                     sys.exit(f"Device reported: {m.group(1)}. Try again; if it "
                              "keeps happening, don't use the device")
             self.buf += self.port.read(256)
+            if len(self.buf) > 4096:
+                sys.exit("Serial response exceeds maximum size")
         sys.exit(f"No answer from the device within {REQUEST_TIMEOUT} s (is "
                  "'Generate on Enter in serial console' enabled in the firmware? "
-                 "If not, use --button)")
+                 "Use matching firmware and host versions, or use --button)")
 
 
 def main():
@@ -195,6 +230,7 @@ def main():
         for i in range(args.count):
             groups = []
             while len(groups) < args.words:
+                request_id = None
                 if args.button:
                     label = f" ({i + 1}/{args.count})" if args.count > 1 else ""
                     if groups:
@@ -205,10 +241,14 @@ def main():
                              "(Ctrl+C to cancel)")
                     timeout = None
                 else:
-                    port.write(b"\n")
+                    request_id = secrets.token_hex(16)
+                    request = f"PASSU/1 {request_id}\n".encode("ascii")
+                    if port.write(request) != len(request):
+                        sys.exit("Cannot send complete request to the device")
                     timeout = REQUEST_TIMEOUT
                 groups += SEPARATOR.split(
-                    reader.read_passphrase(timeout, bare_ok=args.button))
+                    reader.read_passphrase(timeout, bare_ok=args.button,
+                                           request_id=request_id))
             phrase = shape(groups, args.words, args.digits, args.spaces)
             groups = None
             if args.copy:
