@@ -203,8 +203,9 @@ func openPort(device string) (serial.Port, error) {
 
 // lineReader splits the serial stream into lines and stops at a deadline.
 type lineReader struct {
-	port io.Reader
-	buf  []byte
+	port    io.Reader
+	buf     []byte
+	readErr error
 }
 
 // readPassphrase returns the next passphrase from the serial stream, waiting
@@ -217,11 +218,6 @@ func (r *lineReader) readPassphrase(timeout time.Duration, bareOK bool) (string,
 	}
 	chunk := make([]byte, 256)
 	for timeout == 0 || time.Now().Before(deadline) {
-		n, err := r.port.Read(chunk)
-		if err != nil {
-			return "", fatal("Lost connection to the device (unplugged?)")
-		}
-		r.buf = append(r.buf, chunk[:n]...)
 		for {
 			i := bytes.IndexByte(r.buf, '\n')
 			if i < 0 {
@@ -246,6 +242,12 @@ func (r *lineReader) readPassphrase(timeout time.Duration, bareOK bool) (string,
 					"keeps happening, don't use the device", m[1])
 			}
 		}
+		if r.readErr != nil {
+			return "", fatal("Lost connection to the device (unplugged?)")
+		}
+		n, err := r.port.Read(chunk)
+		r.buf = append(r.buf, chunk[:n]...)
+		r.readErr = err // io.Reader may return valid data together with an error.
 	}
 	return "", fatalf("No answer from the device within %d s (is "+
 		"'Generate on Enter in serial console' enabled in the firmware? "+
